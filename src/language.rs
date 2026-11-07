@@ -51,6 +51,21 @@ fn docker_configured_proxy_env() -> Vec<(&'static str, String)> {
     vars
 }
 
+/// Rust functions are built in a Linux container: fail early, with the reason, when Docker is not usable.
+pub fn require_docker() -> Result<()> {
+    let output = Command::new("docker")
+        .args(["version", "--format", "{{.Server.Version}}"])
+        .output()
+        .context("`docker` was not found on PATH (needed to build Rust functions)")?;
+    if !output.status.success() {
+        bail!(
+            "Docker is not running (needed to build Rust functions): {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
 /// Supported guest languages recognized by the CLI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
@@ -125,6 +140,12 @@ pub trait LanguageAdapter {
     ) -> Result<BuildOutput> {
         self.build(dir, release, shared_target)
     }
+
+    /// Cheap checks that a build would fail on, run without building anything so a batch deploy
+    /// can reject a bad function before it publishes the first one.
+    fn preflight(&self, _dir: &Path) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Detect which adapter applies to a function directory. Returns the
@@ -176,6 +197,13 @@ impl LanguageAdapter for RustAdapter {
         self.build_with_runtime_class(dir, release, shared_target, None)
     }
 
+    fn preflight(&self, dir: &Path) -> Result<()> {
+        if !dir.join("src").join("bin").join("native_worker.rs").exists() {
+            bail!("missing src/bin/native_worker.rs (required native-v1 entrypoint)");
+        }
+        docker_mount_root(&dir.canonicalize().with_context(|| format!("Failed to resolve {}", dir.display()))?).map(|_| ())
+    }
+
     /// native-v1 only — the wasm32/wasm-core-v1 build path has been retired
     /// entirely (gVisor Dispatcher has no execution path for wasm-core-v1,
     /// see `services/compute-dispatcher/src/main.rs::resolve_guest_image`;
@@ -215,20 +243,12 @@ impl LanguageAdapter for RustAdapter {
             .canonicalize()
             .with_context(|| format!("Failed to resolve {}", dir.display()))?;
 
-        // A function's Cargo.toml depends on `picus-wasm-sdk` via a relative
-        // `path = "../../packages/wasm-sdk"` (or deeper, for fixtures nested
-        // further under the repo) — mounting only `dir` into the container
-        // would leave that path dangling outside the mount. Walk up until we
-        // find the workspace root that actually has `packages/wasm-sdk`, and
-        // mount THAT, preserving `dir`'s position under it as the container
-        // workdir, so Cargo's relative dependency resolution works exactly
-        // like it does on the host.
-        let workspace_root = find_wasm_sdk_workspace_root(&abs_dir).with_context(|| {
-            format!(
-                "Could not find a `packages/wasm-sdk` workspace root above {}",
-                abs_dir.display()
-            )
-        })?;
+        // Mount the smallest directory that holds the function and everything its Cargo.toml
+        // reaches by relative path (path dependencies, a parent cargo workspace), preserving the
+        // function's position under it as the container workdir, so Cargo resolves those paths
+        // exactly like it does on the host. A function with only registry dependencies mounts
+        // just its own directory.
+        let workspace_root = docker_mount_root(&abs_dir)?;
         let rel_dir = abs_dir.strip_prefix(&workspace_root).with_context(|| {
             format!(
                 "{} is not under workspace root {}",
@@ -237,6 +257,12 @@ impl LanguageAdapter for RustAdapter {
             )
         })?;
         let container_workdir = Path::new("/workspace").join(rel_dir);
+        // Build output goes to the shared target dir (one per `functions/` root), not under the
+        // mount root: that root is the function's own directory when it has no path
+        // dependencies, so a per-root target would rebuild every dependency for every function.
+        std::fs::create_dir_all(shared_target)
+            .with_context(|| format!("Failed to create {}", shared_target.display()))?;
+        const CONTAINER_TARGET: &str = "/native-target";
 
         const RUST_IMAGE: &str = "rust:1.95.0-slim-trixie";
         // `rustup` searches UPWARD from the container's cwd for a
@@ -292,9 +318,14 @@ impl LanguageAdapter for RustAdapter {
         }
         cmd.arg("-v")
             .arg(format!("{}:/workspace", workspace_root.display()))
+            .arg("-v")
+            .arg(format!("{}:{CONTAINER_TARGET}", shared_target.display()))
+            // Crates.io downloads survive between function builds instead of being fetched again
+            // by every one of the `--rm` containers.
+            .args(["-v", "picusbase-cargo-registry:/usr/local/cargo/registry"])
             .arg("-w")
             .arg(container_workdir.display().to_string())
-            .args(["-e", "CARGO_TARGET_DIR=/workspace/.native-target"])
+            .args(["-e", &format!("CARGO_TARGET_DIR={CONTAINER_TARGET}/native-build")])
             .args(["-e", &format!("RUSTUP_TOOLCHAIN={toolchain_version}")]);
         // Forward real per-environment values into the build when the CLI's own environment has
         // them set (from <env>.env via deploy.sh), so a function reading the matching
@@ -337,8 +368,8 @@ impl LanguageAdapter for RustAdapter {
             );
         }
 
-        let binary_path = workspace_root
-            .join(".native-target")
+        let binary_path = shared_target
+            .join("native-build")
             .join("release")
             .join("native_worker");
         if !binary_path.exists() {
@@ -447,28 +478,124 @@ impl LanguageAdapter for JavaScriptAdapter {
     }
 }
 
-fn find_wasm_sdk_workspace_root(start: &Path) -> Result<PathBuf> {
-    let mut candidate = start;
-    loop {
-        // Function lives under `picusbase/` (platform-functions/, examples/): the wasm-sdk is a
-        // direct child.
-        if candidate.join("packages").join("wasm-sdk").join("Cargo.toml").exists() {
-            return Ok(candidate.to_path_buf());
-        }
-        // Function lives in a bundle dir beside `picusbase/` (e.g. `kaiwa-app/functions/<code>/`,
-        // Cargo.toml deps on `../../../picusbase/packages/wasm-sdk`): mount the repo root so both
-        // the function and the sdk are inside the Docker build context.
-        if candidate.join("picusbase").join("packages").join("wasm-sdk").join("Cargo.toml").exists() {
-            return Ok(candidate.to_path_buf());
-        }
-        match candidate.parent() {
-            Some(parent) => candidate = parent,
-            None => bail!(
-                "Walked up to filesystem root from {} without finding packages/wasm-sdk",
-                start.display()
-            ),
+/// `path = "..."` dependencies declared in a `Cargo.toml` table, as `(crate name, declared path)`.
+fn path_dependencies(manifest: &toml::Value) -> Vec<(String, String)> {
+    fn from_table(table: &toml::Value, out: &mut Vec<(String, String)>) {
+        let Some(table) = table.as_table() else { return };
+        for (name, dep) in table {
+            if let Some(path) = dep.get("path").and_then(|p| p.as_str()) {
+                out.push((name.clone(), path.to_string()));
+            }
         }
     }
+    let mut out = Vec::new();
+    for key in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        if let Some(table) = manifest.get(key) {
+            from_table(table, &mut out);
+        }
+    }
+    if let Some(targets) = manifest.get("target").and_then(|t| t.as_table()) {
+        for target in targets.values() {
+            for key in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                if let Some(table) = target.get(key) {
+                    from_table(table, &mut out);
+                }
+            }
+        }
+    }
+    if let Some(table) = manifest.get("workspace").and_then(|w| w.get("dependencies")) {
+        from_table(table, &mut out);
+    }
+    // `[patch.<registry>]` entries may point at a local checkout too.
+    if let Some(patches) = manifest.get("patch").and_then(|p| p.as_table()) {
+        for registry in patches.values() {
+            from_table(registry, &mut out);
+        }
+    }
+    out
+}
+
+/// `a/b/../c` as `a/c`, without touching the filesystem (the path may not exist).
+fn lexical_normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+fn read_manifest(dir: &Path) -> Result<toml::Value> {
+    let path = dir.join("Cargo.toml");
+    let text = std::fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+    toml::from_str(&text).with_context(|| format!("Invalid TOML in {}", path.display()))
+}
+
+/// The directory to mount into the Linux build container for a function: the closest common
+/// ancestor of the function, every path dependency it reaches (transitively), and the cargo
+/// workspace above it if it is a member of one.
+///
+/// A path dependency that does not exist is an error naming the dependency, the path declared and
+/// the Cargo.toml that declares it, since Cargo itself only reports the failure inside the
+/// container, where the host paths are not visible.
+fn docker_mount_root(abs_dir: &Path) -> Result<PathBuf> {
+    let mut roots: Vec<PathBuf> = vec![abs_dir.to_path_buf()];
+    let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+    let mut queue: Vec<PathBuf> = vec![abs_dir.to_path_buf()];
+    let mut missing: Vec<String> = Vec::new();
+
+    while let Some(dir) = queue.pop() {
+        if !seen.insert(dir.clone()) {
+            continue;
+        }
+        let manifest = read_manifest(&dir)?;
+        for (name, declared) in path_dependencies(&manifest) {
+            let target = dir.join(&declared);
+            match target.canonicalize() {
+                Ok(resolved) if resolved.join("Cargo.toml").exists() => {
+                    roots.push(resolved.clone());
+                    queue.push(resolved);
+                }
+                _ => missing.push(format!("path dependency `{name}` = \"{declared}\" not found (expected {})", lexical_normalize(&target).display())),
+            }
+        }
+    }
+    if !missing.is_empty() {
+        // No function name or manifest path here: the same message for every function that shares a
+        // missing dependency lets a batch deploy report them together.
+        bail!("{}", missing.join("; "));
+    }
+
+    // Cargo finds a parent workspace by walking up from the function; the container must see it too.
+    if read_manifest(abs_dir).ok().is_some_and(|m| m.get("workspace").is_none()) {
+        for ancestor in abs_dir.ancestors().skip(1) {
+            if read_manifest(ancestor).ok().is_some_and(|m| m.get("workspace").is_some()) {
+                roots.push(ancestor.to_path_buf());
+                break;
+            }
+        }
+    }
+
+    let mut common = roots[0].clone();
+    for root in &roots[1..] {
+        while !root.starts_with(&common) {
+            if !common.pop() {
+                break;
+            }
+        }
+    }
+    if common.parent().is_none() {
+        bail!(
+            "The path dependencies of {} only share the filesystem root, so mounting them would expose the whole disk. Keep them under one directory.",
+            abs_dir.display()
+        );
+    }
+    Ok(common)
 }
 
 fn read_function_id(dir: &Path) -> Result<String> {

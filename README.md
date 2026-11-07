@@ -59,6 +59,10 @@ Ba lane hỗ trợ:
 | `--language javascript` | JavaScript | `src/index.mjs` |
 | `--language python` | Python | `src/handler.py` |
 
+### Function Rust (native-v1)
+
+Cần `picus.toml`, `Cargo.toml` và `src/bin/native_worker.rs`. Build chạy trong Docker (Linux) nên cần Docker đang chạy. Dependency từ crates.io không cần gì thêm. Dependency kiểu `path` (kể cả bắc cầu) và workspace cha được mount vào container, nên phải cùng nằm dưới một thư mục (ví dụ `sdk/` cạnh `functions/` của bundle). Kết quả build nằm ở `functions/target/`. Đặt `PICUS_NATIVE_BUILD_PLATFORM` (vd `linux/amd64`) khi nền tảng đích khác kiến trúc máy build.
+
 ### 2. Build
 
 ```bash
@@ -85,6 +89,23 @@ picusbase function upload \
   --file ./artifact.tar.gz \
   --runtime-class javascript-v1
 ```
+
+### 3b. Deploy cả bundle (`deploy schema`)
+
+```bash
+picusbase deploy schema --path <bundle> --project-ref <ref>
+```
+
+Role, entity, function, automation và AI agent của bundle. Chạy lại được.
+
+| Cờ | Tác dụng |
+|---|---|
+| `--dry-run` (`--plan`) | Không ghi gì: kiểm tra bundle, liệt kê cái nào mới / đã có |
+| `--keep-going` | Một function lỗi thì vẫn deploy các function còn lại, báo mọi lỗi ở cuối |
+| `--skip-functions` | Bỏ qua `functions/` |
+| `--no-publish` | Chỉ tạo bản nháp entity |
+
+Function Rust được kiểm tra trước khi ghi gì (`native_worker.rs`, path dependency trong `Cargo.toml`, Docker). Bundle có function không build được thì dừng khi chưa deploy gì.
 
 ### 4. Chạy nhanh (smoke test)
 

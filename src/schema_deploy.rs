@@ -18,6 +18,30 @@ pub struct SchemaDeployOptions {
     pub skip_functions: bool,
     pub no_publish: bool,
     pub bound_user_id: Option<String>,
+    /// Check and report only: nothing is written to the project.
+    pub dry_run: bool,
+    /// A failing function does not stop the others; every failure is reported at the end.
+    pub keep_going: bool,
+}
+
+/// Roles the platform provides in every project; a permission naming one without a `role.yaml` is normal.
+const BUILT_IN_ROLES: [&str; 4] = ["admin", "anon", "authenticated", "project-members"];
+
+/// The server warns about every role named in a `permissions.yaml` that has no `roles/<x>/role.yaml`.
+fn is_built_in_role_warning(warning: &str) -> bool {
+    warning
+        .strip_prefix("role '")
+        .and_then(|rest| rest.split('\'').next())
+        .is_some_and(|name| BUILT_IN_ROLES.contains(&name))
+}
+
+/// Names for a summary line: all of them up to `limit`, then how many were left out.
+fn list_names(names: &[String], limit: usize) -> String {
+    if names.len() <= limit {
+        names.join(", ")
+    } else {
+        format!("{}, … and {} more", names[..limit].join(", "), names.len() - limit)
+    }
 }
 
 struct Api<'a> {
@@ -44,6 +68,10 @@ impl Api<'_> {
 
     fn post(&self, path: &str, body: &Value, what: &str) -> Result<Value> {
         self.send(self.http.post(self.url(path)).json(body), what)
+    }
+
+    fn get(&self, path: &str, what: &str) -> Result<Value> {
+        self.send(self.http.get(self.url(path)), what)
     }
 }
 
@@ -80,7 +108,9 @@ fn yaml_to_json(text: &str, what: &str) -> Result<Value> {
     Ok(serde_json::to_value(value)?)
 }
 
-/// Entities referenced by a `relation` field must be defined first (otherwise 422 on a fresh project).
+/// Entities referenced by a `relation` field are defined first where there is an order to follow. Entities that
+/// reference each other have none, and the server accepts a relation to an entity defined later, so they go in
+/// name order.
 fn deploy_order(doctypes: &BTreeMap<String, Value>) -> Vec<String> {
     let deps: BTreeMap<&str, BTreeSet<&str>> = doctypes
         .iter()
@@ -114,7 +144,10 @@ fn deploy_order(doctypes: &BTreeMap<String, Value>) -> Vec<String> {
     }
     let cyclic: Vec<String> = deps.keys().filter(|c| !done.contains(*c)).map(|c| c.to_string()).collect();
     if !cyclic.is_empty() {
-        println!("  (relation cycle between: {} — kept in name order)", cyclic.join(", "));
+        println!(
+            "  (entities that reference each other: {} — deployed in name order; the server accepts relations to entities defined later)",
+            cyclic.join(", ")
+        );
         order.extend(cyclic);
     }
     order
@@ -147,6 +180,34 @@ pub fn run(
         .collect();
     println!("Found {} entities, {} roles in {}", entities.len(), roles.len(), bundle_dir.display());
 
+    // Everything a function build can be rejected for is checked before the first write, so a bad
+    // function stops the deploy before entities and roles are published, not halfway through.
+    let mut failed_functions: Vec<(PathBuf, String)> = Vec::new();
+    let mut deployable: Vec<PathBuf> = Vec::new();
+    let scan = scan_functions(&bundle_dir.join("functions"))?;
+    if !options.skip_functions {
+        deployable = scan.dirs.clone();
+        let failures = preflight_functions(&scan.dirs);
+        if !failures.is_empty() {
+            // A dry run reports them in its own summary.
+            if !options.dry_run {
+                println!("\nFunctions that cannot be built:\n{}", describe_failures(&failures));
+            }
+            if !options.keep_going && !options.dry_run {
+                bail!(
+                    "{} function(s) cannot be built, so nothing was deployed. Fix them, or use --skip-functions, or --keep-going to deploy the rest.",
+                    failures.len()
+                );
+            }
+            deployable.retain(|dir| !failures.iter().any(|(failed, _)| failed == dir));
+            failed_functions.extend(failures);
+        }
+    }
+
+    if options.dry_run {
+        return dry_run(&api, bundle_dir, &entities, roles.len(), &scan, &failed_functions, options.skip_functions);
+    }
+
     if !entities.is_empty() {
         println!("\nRoles & permissions:");
         let result = api.post("/schema/roles", &json!({ "entities": entities, "roles": roles }), "resolve roles")?;
@@ -157,7 +218,10 @@ pub fn run(
             }
         }
         for warning in result["warnings"].as_array().into_iter().flatten() {
-            println!("  ⚠️  {}", warning.as_str().unwrap_or_default());
+            let warning = warning.as_str().unwrap_or_default();
+            if !is_built_in_role_warning(warning) {
+                println!("  ⚠️  {warning}");
+            }
         }
         let generated: HashMap<String, String> = serde_json::from_value(result["generated_permissions"].clone()).unwrap_or_default();
         for (code, text) in &generated {
@@ -191,13 +255,15 @@ pub fn run(
                 invalid.push(code);
                 continue;
             }
+            // Every deploy adds a version, so v1 is an entity the project did not have.
+            let kind = if seq == 1 { "new" } else { "new version" };
             if options.no_publish {
-                println!("  ✓ {code} v{seq} drafted");
+                println!("  ✓ {code} v{seq} drafted ({kind})");
                 continue;
             }
             let id = draft["id"].as_str().unwrap_or_default();
             api.post(&format!("/builder/entity/{code}/versions/{id}/publish"), &Value::Null, &format!("publish entity '{code}'"))?;
-            println!("  ✓ {code} v{seq}");
+            println!("  ✓ {code} v{seq} ({kind})");
         }
         if !invalid.is_empty() {
             bail!("{} entity version(s) failed validation: {}", invalid.len(), invalid.join(", "));
@@ -207,14 +273,160 @@ pub fn run(
     if options.skip_functions {
         println!("\nFunctions: skipped (--skip-functions)");
     } else {
-        deploy_functions(&bundle_dir.join("functions"), client, project_ref, personal_token)?;
+        failed_functions.extend(deploy_functions(&scan, &deployable, client, project_ref, personal_token, options.keep_going)?);
     }
     restore_automations(&api, &bundle_dir.join("automations"))?;
     let bound_user = options.bound_user_id.or_else(|| jwt_subject(&api.token));
     restore_ai_agents(&api, &bundle_dir.join("ai_agent").join("agents"), bound_user.as_deref())?;
 
+    if !failed_functions.is_empty() {
+        bail!("Deployed, except {} function(s) that failed:\n{}", failed_functions.len(), describe_failures(&failed_functions));
+    }
     println!("\nDone.");
     Ok(())
+}
+
+/// Failures grouped by reason, so 75 functions missing the same dependency read as one line.
+fn describe_failures(failures: &[(PathBuf, String)]) -> String {
+    let mut groups: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for (dir, reason) in failures {
+        groups.entry(reason.as_str()).or_default().push(dir_name(dir));
+    }
+    groups
+        .into_iter()
+        .map(|(reason, names)| format!("  ✗ {} function(s): {reason}\n      {}", names.len(), list_names(&names, 6)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn dir_name(dir: &Path) -> String {
+    dir.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| dir.display().to_string())
+}
+
+/// `--dry-run`: what a real run would create or update, from the bundle and read-only calls. Roles are
+/// not resolved here: that call writes.
+fn dry_run(
+    api: &Api,
+    bundle_dir: &Path,
+    entities: &BTreeMap<String, Files>,
+    role_files: usize,
+    scan: &FunctionScan,
+    failed_functions: &[(PathBuf, String)],
+    skip_functions: bool,
+) -> Result<()> {
+    println!("\nDry run: nothing is written to project {}.", api.project_ref);
+
+    if !entities.is_empty() {
+        let doctypes: BTreeMap<String, Value> = entities
+            .iter()
+            .map(|(code, files)| {
+                let text = files.get("doctype.yaml").with_context(|| format!("doctypes/{code}/doctype.yaml is missing"))?;
+                Ok((code.clone(), yaml_to_json(text, &format!("doctypes/{code}/doctype.yaml"))?))
+            })
+            .collect::<Result<_>>()?;
+        let existing: HashSet<String> = api
+            .get("/entities", "list entities")?
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|row| row["entity_code"].as_str().map(str::to_string))
+            .collect();
+        let (present, new): (Vec<String>, Vec<String>) = deploy_order(&doctypes).into_iter().partition(|code| existing.contains(code));
+        println!("\nEntities ({}): {} new, {} already in the project (each gets a new version)", doctypes.len(), new.len(), present.len());
+        if !new.is_empty() {
+            println!("  + {}", list_names(&new, 40));
+        }
+    }
+    println!("\nRoles: {role_files} role.yaml. Roles named in permissions.yaml are created or updated by the real run.");
+
+    if skip_functions {
+        println!("\nFunctions: skipped (--skip-functions)");
+    } else {
+        let deployed: HashSet<String> = api
+            .get("/compute/functions", "list functions")?
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|row| row["function_key"].as_str().map(str::to_string))
+            .collect();
+        let (present, new): (Vec<String>, Vec<String>) = scan
+            .dirs
+            .iter()
+            .filter_map(|dir| crate::config::PicusConfig::load_from_dir(dir).ok().map(|config| config.function.id))
+            .partition(|id| deployed.contains(id));
+        let blocked = if failed_functions.is_empty() { String::new() } else { format!(", {} cannot be built", failed_functions.len()) };
+        println!("\nFunctions ({}): {} new, {} already deployed (rebuilt and published again){blocked}", scan.dirs.len(), new.len(), present.len());
+        if !new.is_empty() {
+            println!("  + {}", list_names(&new, 40));
+        }
+        if !failed_functions.is_empty() {
+            println!("{}", describe_failures(failed_functions));
+        }
+        print_skipped(scan);
+    }
+
+    let automations = json_files(&bundle_dir.join("automations"))?;
+    if !automations.is_empty() {
+        let existing = existing_ids(api, "workflow_definition");
+        let ids: Vec<String> = automations
+            .iter()
+            .filter_map(|path| serde_json::from_str::<Value>(&std::fs::read_to_string(path).ok()?).ok()?["id"].as_str().map(str::to_string))
+            .collect();
+        let known = ids.iter().filter(|id| existing.contains(*id)).count();
+        println!("\nAutomations ({}): {} new, {known} already in the project (updated)", automations.len(), automations.len() - known);
+    }
+
+    let agents = yaml_files(&bundle_dir.join("ai_agent").join("agents"))?;
+    if !agents.is_empty() {
+        let existing = existing_agent_handles(api);
+        let handles: Vec<String> = agents
+            .iter()
+            .filter_map(|path| yaml_to_json(&std::fs::read_to_string(path).ok()?, "agent").ok()?["handle"].as_str().map(str::to_string))
+            .collect();
+        let new: Vec<String> = handles.iter().filter(|h| !existing.contains(*h)).cloned().collect();
+        println!("\nAI agents ({}): {} new, {} already present (skipped)", handles.len(), new.len(), handles.len() - new.len());
+        if !new.is_empty() {
+            println!("  + {}", list_names(&new, 40));
+        }
+    }
+    Ok(())
+}
+
+fn json_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    sorted_files(dir, "json")
+}
+
+fn yaml_files(dir: &Path) -> Result<Vec<PathBuf>> {
+    sorted_files(dir, "yaml")
+}
+
+fn sorted_files(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|ext| ext == extension))
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+/// Record ids of an entity; none when the entity is not defined yet.
+fn existing_ids(api: &Api, entity: &str) -> HashSet<String> {
+    api.get(&format!("/entities/{entity}/records?limit=1000"), &format!("list {entity} records"))
+        .ok()
+        .and_then(|rows| rows.as_array().map(|rows| rows.iter().filter_map(|row| row["id"].as_str().map(str::to_string)).collect()))
+        .unwrap_or_default()
+}
+
+fn existing_agent_handles(api: &Api) -> HashSet<String> {
+    api.get("/entities/ai_agent/records?limit=1000", "list ai_agent records")
+        .ok()
+        .and_then(|rows| {
+            rows.as_array().map(|rows| rows.iter().filter_map(|row| row["data"]["handle"].as_str().map(str::to_string)).collect())
+        })
+        .unwrap_or_default()
 }
 
 /// `picusbase data restore` — replace entity records from `<dir>/*.sql` dumps
@@ -237,22 +449,97 @@ pub fn restore_data(client: &PicusClient, dir: &Path, project_ref: &str) -> Resu
     Ok(())
 }
 
-fn deploy_functions(dir: &Path, client: &PicusClient, project_ref: &str, personal_token: Option<String>) -> Result<()> {
+struct FunctionScan {
+    /// Directories with a `picus.toml`, sorted.
+    dirs: Vec<PathBuf>,
+    /// Entries of `functions/` that are not functions, with why (e.g. `target (build output)`).
+    skipped: Vec<String>,
+}
+
+fn scan_functions(dir: &Path) -> Result<FunctionScan> {
+    let mut scan = FunctionScan { dirs: Vec::new(), skipped: Vec::new() };
     if !dir.is_dir() {
-        return Ok(());
+        return Ok(scan);
     }
-    let mut function_dirs: Vec<PathBuf> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.join("picus.toml").exists())
-        .collect();
-    function_dirs.sort();
-    if function_dirs.is_empty() {
-        return Ok(());
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?.filter_map(|e| e.ok().map(|e| e.path())).collect();
+    entries.sort();
+    for path in entries {
+        let name = dir_name(&path);
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.join("picus.toml").exists() {
+            scan.dirs.push(path);
+            continue;
+        }
+        let why = if !path.is_dir() {
+            "not a directory"
+        } else if name == "target" {
+            "build output"
+        } else {
+            "no picus.toml"
+        };
+        scan.skipped.push(format!("{name} ({why})"));
     }
-    println!("\nFunctions ({}):", function_dirs.len());
-    for function_dir in function_dirs {
-        crate::deploy_function_dir(
-            &function_dir,
+    Ok(scan)
+}
+
+fn print_skipped(scan: &FunctionScan) {
+    if !scan.skipped.is_empty() {
+        println!("  not deployed: {}", scan.skipped.join(", "));
+    }
+}
+
+/// Checks that need no build: `picus.toml` and the language's own requirements, and Docker for Rust.
+fn preflight_functions(dirs: &[PathBuf]) -> Vec<(PathBuf, String)> {
+    use crate::language::{adapter_for, detect_language, Language};
+    let mut failures = Vec::new();
+    let mut needs_docker = false;
+    for dir in dirs {
+        let check = || -> Result<Language> {
+            crate::config::PicusConfig::load_from_dir(dir)?;
+            let lang = detect_language(dir)?;
+            adapter_for(lang).preflight(dir)?;
+            Ok(lang)
+        };
+        match check() {
+            Ok(lang) => needs_docker |= lang == Language::Rust,
+            Err(error) => failures.push((dir.clone(), format!("{error:#}"))),
+        }
+    }
+    if needs_docker {
+        if let Err(error) = crate::language::require_docker() {
+            // Every Rust function fails for the same reason: report it once, against all of them.
+            let rust: Vec<&PathBuf> = dirs
+                .iter()
+                .filter(|dir| !failures.iter().any(|(failed, _)| failed == *dir) && detect_language(dir).is_ok_and(|lang| lang == Language::Rust))
+                .collect();
+            failures.extend(rust.into_iter().map(|dir| (dir.clone(), format!("{error:#}"))));
+        }
+    }
+    failures
+}
+
+/// Deploys each function in order. A failure stops the run unless `keep_going`, in which case it is
+/// collected and returned.
+fn deploy_functions(
+    scan: &FunctionScan,
+    dirs: &[PathBuf],
+    client: &PicusClient,
+    project_ref: &str,
+    personal_token: Option<String>,
+    keep_going: bool,
+) -> Result<Vec<(PathBuf, String)>> {
+    let mut failed = Vec::new();
+    if scan.dirs.is_empty() {
+        print_skipped(scan);
+        return Ok(failed);
+    }
+    println!("\nFunctions ({}):", scan.dirs.len());
+    print_skipped(scan);
+    for function_dir in dirs {
+        let result = crate::deploy_function_dir(
+            function_dir,
             client.base_url(),
             Some(project_ref.to_string()),
             None,
@@ -261,9 +548,19 @@ fn deploy_functions(dir: &Path, client: &PicusClient, project_ref: &str, persona
             None,
             personal_token.clone(),
         )
-        .with_context(|| format!("Failed to deploy function {}", function_dir.display()))?;
+        .with_context(|| format!("Failed to deploy function {}", function_dir.display()));
+        if let Err(error) = result {
+            if !keep_going {
+                eprintln!(
+                    "\nEntities and roles were already published. Fix the function and run again (deploy schema can be repeated), or use --keep-going to deploy the other functions."
+                );
+                return Err(error);
+            }
+            eprintln!("✗ {:#}", error);
+            failed.push((function_dir.clone(), format!("{error:#}")));
+        }
     }
-    Ok(())
+    Ok(failed)
 }
 
 /// `automations/<id>.json` → `workflow_definition` records, upserted by `id`.
@@ -293,7 +590,7 @@ fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
                 .json(&body)
                 .send()?;
             if res.status().is_success() {
-                println!("  = {name}");
+                println!("  = {name}{}", id_suffix(&id));
                 continue;
             }
             if res.status() != reqwest::StatusCode::NOT_FOUND {
@@ -301,9 +598,17 @@ fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
             }
         }
         api.post("/entities/workflow_definition/records", &body, &format!("create automation '{name}'"))?;
-        println!("  + {name}");
+        println!("  + {name}{}", id_suffix(&id));
     }
     Ok(())
+}
+
+fn id_suffix(id: &str) -> String {
+    if id.is_empty() {
+        String::new()
+    } else {
+        format!(" ({id})")
+    }
 }
 
 /// `ai_agent/agents/<handle>.yaml` → `ai_agent` records (created via the API so the
