@@ -808,6 +808,12 @@ pub enum DeployCommands {
         /// Owner (user id) of newly created AI agents (default: the logged-in user)
         #[arg(long)]
         bound_user_id: Option<String>,
+        /// Check the bundle and show what would be created or updated, without writing anything
+        #[arg(long, alias = "plan", default_value_t = false)]
+        dry_run: bool,
+        /// When a function fails, deploy the remaining ones and report every failure at the end
+        #[arg(long, default_value_t = false)]
+        keep_going: bool,
     },
     /// Build a frontend app (picus.app.toml) and deploy it to its domain
     App {

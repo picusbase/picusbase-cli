@@ -1580,14 +1580,14 @@ fn main() -> Result<()> {
             }
         },
         Commands::Deploy(args) => match args.command {
-            DeployCommands::Schema { path, skip_functions, no_publish, bound_user_id } => {
+            DeployCommands::Schema { path, skip_functions, no_publish, bound_user_id, dry_run, keep_going } => {
                 let project_ref = resolved_project_ref.as_deref().context("project_ref is required: --project-ref or PICUS_PROJECT_REF")?;
                 schema_deploy::run(
                     &client,
                     &path,
                     project_ref,
                     resolved_personal_token.clone(),
-                    schema_deploy::SchemaDeployOptions { skip_functions, no_publish, bound_user_id },
+                    schema_deploy::SchemaDeployOptions { skip_functions, no_publish, bound_user_id, dry_run, keep_going },
                 )
             }
             DeployCommands::App { path, domain, skip_build } => {

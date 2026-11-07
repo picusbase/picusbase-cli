@@ -86,6 +86,23 @@ picusbase function upload \
   --runtime-class javascript-v1
 ```
 
+### 3b. Deploy cả bundle (`deploy schema`)
+
+```bash
+picusbase deploy schema --path <bundle> --project-ref <ref>
+```
+
+Role, entity, function, automation và AI agent của bundle. Chạy lại được.
+
+| Cờ | Tác dụng |
+|---|---|
+| `--dry-run` (`--plan`) | Không ghi gì: kiểm tra bundle, liệt kê cái nào mới / đã có |
+| `--keep-going` | Một function lỗi thì vẫn deploy các function còn lại, báo mọi lỗi ở cuối |
+| `--skip-functions` | Bỏ qua `functions/` |
+| `--no-publish` | Chỉ tạo bản nháp entity |
+
+Function Rust được kiểm tra trước khi ghi gì (`native_worker.rs`, path dependency trong `Cargo.toml`, Docker). Bundle có function không build được thì dừng khi chưa deploy gì.
+
 ### 4. Chạy nhanh (smoke test)
 
 ```bash
