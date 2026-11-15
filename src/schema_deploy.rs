@@ -180,6 +180,16 @@ pub fn run(
         .collect();
     println!("Found {} entities, {} roles in {}", entities.len(), roles.len(), bundle_dir.display());
 
+    if !["doctypes", "roles", "functions"].iter().any(|dir| bundle_dir.join(dir).is_dir()) {
+        bail!("{} is not a bundle: it has no doctypes/, roles/ or functions/ directory", bundle_dir.display());
+    }
+    // The server refuses an entity without these files; a dry run has to say so too. `permissions.yaml`
+    // can be left out when roles/ generates it.
+    let missing = missing_entity_files(&entities, !roles.is_empty());
+    if !missing.is_empty() {
+        bail!("The server would refuse these entity files, which are missing:\n  {}", missing.join("\n  "));
+    }
+
     // Everything a function build can be rejected for is checked before the first write, so a bad
     // function stops the deploy before entities and roles are published, not halfway through.
     let mut failed_functions: Vec<(PathBuf, String)> = Vec::new();
@@ -297,6 +307,20 @@ fn describe_failures(failures: &[(PathBuf, String)]) -> String {
         .map(|(reason, names)| format!("  ✗ {} function(s): {reason}\n      {}", names.len(), list_names(&names, 6)))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// `doctypes/<code>/<file>` for every file of an entity that the server requires and the bundle lacks.
+fn missing_entity_files(entities: &BTreeMap<String, Files>, has_roles: bool) -> Vec<String> {
+    let mut required = vec!["doctype.yaml", "views.yaml", "lifecycle.yaml"];
+    if !has_roles {
+        required.push("permissions.yaml");
+    }
+    entities
+        .iter()
+        .flat_map(|(code, files)| {
+            required.iter().filter(|name| !files.contains_key(**name)).map(move |name| format!("doctypes/{code}/{name}"))
+        })
+        .collect()
 }
 
 fn dir_name(dir: &Path) -> String {
