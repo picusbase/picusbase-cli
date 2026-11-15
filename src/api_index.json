@@ -36,11 +36,11 @@
    "method": "POST",
    "path": "/authz/projects/{ref}/permissions",
    "summary": "Thêm khoá quyền vào danh mục",
-   "description": "INSERT IGNORE vào `system_permission_catalog`. Danh mục dùng chung nên khoá do thành viên một project thêm hiện ở mọi project.",
+   "description": "INSERT IGNORE vào `system_permission_catalog`. Danh mục dùng chung nên khoá do owner/admin của một project thêm hiện ở mọi project.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -92,7 +92,7 @@
    },
    "responses": {
     "201": "Mục đã thêm (trả lại thân yêu cầu).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -204,7 +204,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -242,7 +242,7 @@
    },
    "responses": {
     "201": "Vai trò mới.",
-    "403": "Không phải thành viên project.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -255,7 +255,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -282,7 +282,7 @@
    "responses": {
     "200": "`true`/`false`.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Vai trò hệ thống hoặc không phải thành viên.",
+    "403": "Vai trò hệ thống hoặc người gọi không phải owner/admin của project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -295,7 +295,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -339,7 +339,7 @@
    "responses": {
     "200": "Vai trò sau khi sửa.",
     "400": "`role_id` không phải UUID.",
-    "403": "Vai trò hệ thống hoặc không phải thành viên.",
+    "403": "Vai trò hệ thống hoặc người gọi không phải owner/admin của project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -348,7 +348,7 @@
    "method": "GET",
    "path": "/authz/projects/{ref}/roles/{role_id}/permissions",
    "summary": "Liệt kê khoá quyền của vai trò",
-   "description": "Trả mảng `permission_key` sắp theo chữ cái. KHÔNG kiểm tra `role_id` thuộc `ref`.",
+   "description": "Trả mảng `permission_key` sắp theo chữ cái. `role_id` phải thuộc `ref`, nếu không trả 404.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -380,6 +380,7 @@
     "200": "Các khoá quyền.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "403": "Không phải thành viên.",
+    "404": "Vai trò không thuộc project trong đường dẫn.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -388,11 +389,11 @@
    "method": "PUT",
    "path": "/authz/projects/{ref}/roles/{role_id}/permissions",
    "summary": "Đặt toàn bộ khoá quyền của vai trò",
-   "description": "Xoá hết quyền hiện có của vai trò rồi chèn danh sách mới trong một giao dịch. Không kiểm tra khoá có trong catalog hay `role_id` thuộc `ref`.",
+   "description": "Xoá hết quyền hiện có của vai trò rồi chèn danh sách mới trong một giao dịch. `role_id` phải thuộc `ref`, nếu không trả 404. Không kiểm tra khoá có trong catalog.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -440,7 +441,8 @@
    "responses": {
     "200": "Danh sách vừa đặt.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
+    "404": "Vai trò không thuộc project trong đường dẫn.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -478,11 +480,11 @@
    "method": "POST",
    "path": "/authz/projects/{ref}/user-roles",
    "summary": "Gán vai trò cho người dùng",
-   "description": "Chèn hàng gán. Không kiểm tra `user_id` thuộc pool của project, `role_id` thuộc `ref`, cũng như gán trùng. Hiệu lực ngay ở `require_resource_access`.",
+   "description": "Chèn hàng gán. `role_id` phải thuộc `ref`, nếu không trả 404. Không kiểm tra `user_id` thuộc pool của project, cũng như gán trùng. Hiệu lực ngay ở `require_resource_access`.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -522,7 +524,8 @@
    "responses": {
     "201": "Gán mới.",
     "400": "`role_id` không phải UUID.",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
+    "404": "Vai trò không thuộc project trong đường dẫn.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -535,7 +538,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -562,7 +565,7 @@
    "responses": {
     "200": "`true`/`false`.",
     "400": "`assignment_id` không phải UUID.",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -640,7 +643,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -718,7 +721,7 @@
    "responses": {
     "201": "Đã thêm.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi DDL."
    }
   },
@@ -731,7 +734,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -784,7 +787,7 @@
    "responses": {
     "200": "Đã xoá.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi DDL."
    }
   },
@@ -1170,7 +1173,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -1217,7 +1220,7 @@
    "responses": {
     "200": "Mảng dòng (rỗng với câu lệnh ghi).",
     "400": "`X-Project-Ref` không hợp lệ.",
-    "403": "Không phải thành viên project.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi SQL."
    }
   },
@@ -1589,7 +1592,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -1632,7 +1635,7 @@
    "responses": {
     "201": "Đã tạo.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi DDL."
    }
   },
@@ -1645,7 +1648,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -1689,7 +1692,7 @@
    "responses": {
     "200": "Đã xoá.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi DDL."
    }
   },
@@ -1702,7 +1705,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -1760,7 +1763,7 @@
    "responses": {
     "200": "Đã áp dụng hoặc không đổi.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
-    "403": "Không phải thành viên.",
+    "403": "Người gọi không phải owner/admin của project.",
     "500": "Lỗi DDL."
    }
   },
@@ -1992,6 +1995,159 @@
    }
   },
   {
+   "operationId": "list_accounts",
+   "method": "GET",
+   "path": "/platform/admin/accounts",
+   "summary": "Liệt kê tài khoản nền tảng kèm tổ chức họ tham gia (superuser)",
+   "description": "Chỉ superuser. Trả người dùng của System Auth Pool (pool gắn với project `system_auth`), mới nhất trước, mỗi người kèm danh sách tổ chức họ là thành viên: `organizations: [{ id, display_name, role }]`. Một tài khoản có thể có nhiều tổ chức (mỗi tổ chức họ tạo bằng `create_organization` có họ làm `owner`).\nMỗi phần tử: `id`, `email`, `full_name` (từ `raw_user_meta_data`), `role`, `status` (`active`, `pending` khi chưa xác nhận email, `banned`), `email_confirmed_at`, `last_sign_in_at`, `banned_until`, `created_at`, `organizations`. Dùng cho trang quản lý; thao tác trên từng tài khoản (khoá, xác nhận email, đặt lại mật khẩu, xoá) dùng các thao tác `pool-admin` sẵn có với pool này. Hiện không phân trang: tối đa `limit` bản ghi.",
+   "status": "implemented",
+   "auth": "bearer",
+   "permissions": [
+    "superuser"
+   ],
+   "parameters": [
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "description": "Số tài khoản tối đa, mặc định 200, tối đa 1000.",
+     "schema": {
+      "type": "integer"
+     }
+    }
+   ],
+   "requestBody": null,
+   "responses": {
+    "200": "Mảng tài khoản. Lấy `pool_id` của System Auth Pool ở `GET /pool-admin/pools` khi cần gọi thao tác `pool-admin`.",
+    "401": "Thiếu hoặc sai token.",
+    "403": "Không phải superuser.",
+    "404": "Chưa có System Auth Pool gắn với project `system_auth`.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
+   "operationId": "list_registrations",
+   "method": "GET",
+   "path": "/platform/admin/registrations",
+   "summary": "Liệt kê yêu cầu đăng ký (superuser)",
+   "description": "Chỉ superuser. Lọc theo `status` (`pending` mặc định, `approved`, `rejected`, hoặc `all`), mới nhất trước. Mỗi phần tử gồm `id`, `email`, `full_name`, `organization_name`, `status`, `created_at`, `reviewed_at`, `reviewed_by`, `rejection_reason`, `created_user_id`, `created_organization_id`. Không bao giờ trả `password_hash`.",
+   "status": "implemented",
+   "auth": "bearer",
+   "permissions": [
+    "superuser"
+   ],
+   "parameters": [
+    {
+     "name": "status",
+     "in": "query",
+     "required": false,
+     "description": "`pending` (mặc định), `approved`, `rejected` hoặc `all`.",
+     "schema": {
+      "type": "string"
+     }
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "required": false,
+     "description": "Số bản ghi tối đa, mặc định 100, tối đa 500.",
+     "schema": {
+      "type": "integer"
+     }
+    }
+   ],
+   "requestBody": null,
+   "responses": {
+    "200": "Mảng yêu cầu.",
+    "400": "`status` không hợp lệ.",
+    "401": "Thiếu hoặc sai token.",
+    "403": "Không phải superuser.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
+   "operationId": "approve_registration",
+   "method": "POST",
+   "path": "/platform/admin/registrations/{id}/approve",
+   "summary": "Duyệt yêu cầu đăng ký (superuser)",
+   "description": "Chỉ superuser. Với yêu cầu `pending`: (1) tạo người dùng trong System Auth Pool (pool gắn với project `system_auth`) bằng `POST /auth/internal/portal/complete` với băm bcrypt đã lưu, email đã xác nhận, `user_id` sinh trước và lưu vào `created_user_id`; (2) tạo tổ chức đầu tiên `organization_name` kèm user pool mặc định, người dùng đó là `owner`, lưu `created_organization_id` (chỉ là tổ chức khởi đầu: tài khoản có thể sở hữu nhiều tổ chức, tự tạo thêm bằng `create_organization`); (3) đặt `status = approved`, `reviewed_by`, `reviewed_at` và xoá `password_hash` khỏi bản ghi.\nIdempotent: gọi lại với yêu cầu đã `approved` trả `200` như lần đầu; nếu bị ngắt giữa chừng thì gọi lại dùng lại `created_user_id`/`created_organization_id` đã lưu thay vì tạo trùng. Nếu email đã có tài khoản không do yêu cầu này tạo thì trả `409 USER_EXISTS` và để yêu cầu ở `pending` (người duyệt nên từ chối).\nKhông tạo project; chủ tổ chức tự tạo project trong Console.",
+   "status": "implemented",
+   "auth": "bearer",
+   "permissions": [
+    "superuser"
+   ],
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "description": "UUID của yêu cầu.",
+     "schema": {
+      "type": "string",
+      "format": "uuid"
+     }
+    }
+   ],
+   "requestBody": null,
+   "responses": {
+    "200": "`{ id, status, user_id, organization_id }`.",
+    "401": "Thiếu hoặc sai token.",
+    "403": "Không phải superuser.",
+    "404": "Không có yêu cầu.",
+    "409": "`USER_EXISTS` (email đã có tài khoản) hoặc yêu cầu đã `rejected`.",
+    "502": "auth-service từ chối hoặc không phản hồi.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
+   "operationId": "reject_registration",
+   "method": "POST",
+   "path": "/platform/admin/registrations/{id}/reject",
+   "summary": "Từ chối yêu cầu đăng ký (superuser)",
+   "description": "Chỉ superuser. Chuyển yêu cầu `pending` sang `rejected` với `reason` (tuỳ chọn, tối đa 500 ký tự) hiển thị ở `get_registration_status`. Xoá `password_hash` khỏi bản ghi. Gọi lại trên yêu cầu đã `rejected` trả `200`; yêu cầu đã `approved` trả `409`.",
+   "status": "implemented",
+   "auth": "bearer",
+   "permissions": [
+    "superuser"
+   ],
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "description": "UUID của yêu cầu.",
+     "schema": {
+      "type": "string",
+      "format": "uuid"
+     }
+    }
+   ],
+   "requestBody": {
+    "required": false,
+    "content": {
+     "application/json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "reason": {
+         "type": "string",
+         "description": "Lý do từ chối, tối đa 500 ký tự."
+        }
+       }
+      }
+     }
+    }
+   },
+   "responses": {
+    "200": "`{ id, status }`.",
+    "401": "Thiếu hoặc sai token.",
+    "403": "Không phải superuser.",
+    "404": "Không có yêu cầu.",
+    "409": "Yêu cầu đã `approved`.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
    "operationId": "download_app_bundle",
    "method": "GET",
    "path": "/platform/app-bundles/{ref}/{code}/{checksum}",
@@ -2061,7 +2217,7 @@
    "method": "POST",
    "path": "/platform/organizations",
    "summary": "Tạo tổ chức, người gọi thành owner",
-   "description": "Tạo `system_organizations`, thêm người gọi làm `owner`, tạo user pool mặc định `<display_name> Default Pool` ở keyspace `auth`, rồi gọi `POST /auth/admin/pools/bootstrap` (không kèm Authorization, chạy nền) để sinh người dùng gốc cho pool.\n`slug` thiếu thì sinh từ `display_name` kèm 8 ký tự ngẫu nhiên.",
+   "description": "Tạo `system_organizations`, thêm người gọi làm `owner`, tạo user pool mặc định `<display_name> Default Pool` ở keyspace `auth`. Pool mặc định không có người dùng gốc: người tạo là owner qua `system_organization_members`, người dùng của pool do owner/admin thêm.\n`slug` thiếu thì sinh từ `display_name` kèm 8 ký tự ngẫu nhiên.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -2092,7 +2248,8 @@
     }
    },
    "responses": {
-    "200": "Tổ chức mới với `role: owner`; lỗi text với mã 200."
+    "200": "Tổ chức mới với `role: owner`.",
+    "500": "Không tạo được tổ chức hoặc thành viên đầu tiên (thân text `Failed to create org…`)."
    }
   },
   {
@@ -2100,7 +2257,7 @@
    "method": "DELETE",
    "path": "/platform/organizations/{id}",
    "summary": "Xoá tổ chức cùng mọi project",
-   "description": "Chỉ owner. Với từng project của tổ chức thực hiện đúng quy trình `delete_project` (xoá tài nguyên xác thực, gỡ keyspace, drop database/user), rồi xoá hàng `system_projects`, `system_organization_members` và `system_organizations` trong một giao dịch.\nKhông hoàn tác. Lỗi dọn tài nguyên hạ tầng chỉ ghi cảnh báo.",
+   "description": "Owner của tổ chức, hoặc superuser nền tảng (không cần là thành viên, dùng để dọn tổ chức mồ côi). Với từng project của tổ chức thực hiện đúng quy trình `delete_project` (xoá tài nguyên xác thực, gỡ keyspace, drop database/user). Sau đó xoá các user pool cấp tổ chức còn lại (`auth_user_pools.organization_id` = tổ chức, gồm pool mặc định `<tên> Default Pool`): ràng buộc `auth_pool_bindings`, client OAuth `auth_oauth_clients` và hàng pool. Cuối cùng xoá hàng `system_projects`, `system_organization_members` và `system_organizations` trong một giao dịch. Người dùng trong các pool (`auth_users`) không bị xoá.\nKhông hoàn tác. Lỗi dọn tài nguyên hạ tầng chỉ ghi cảnh báo.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -2122,7 +2279,7 @@
    "responses": {
     "200": "`null` khi xong.",
     "400": "`id` không phải UUID.",
-    "403": "Không phải owner.",
+    "403": "Không phải owner của tổ chức và không phải superuser.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -2168,7 +2325,10 @@
     }
    },
    "responses": {
-    "200": "Tổ chức sau cập nhật; lỗi text với mã 200."
+    "200": "Tổ chức sau cập nhật.",
+    "400": "Không có trường nào để cập nhật (thân text `No update fields provided`).",
+    "403": "Người gọi không phải thành viên có quyền cập nhật tổ chức (thân text `Unauthorized`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -2258,16 +2418,18 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Danh sách thành viên, hoặc lỗi text với mã 200 (`Unauthorized`)."
+    "200": "Danh sách thành viên.",
+    "403": "Người gọi không thuộc tổ chức (thân text `Unauthorized`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
    "operationId": "remove_org_member",
    "method": "DELETE",
    "path": "/platform/organizations/{id}/members/{user_id}",
-   "summary": "Gỡ thành viên khỏi tổ chức (hiện hỏng)",
-   "description": "Logic quyền đúng (chỉ owner/admin; admin không gỡ được owner; không gỡ owner cuối cùng) nhưng câu lệnh DELETE (và phép đếm owner) dùng cú pháp PostgreSQL (`system.organization_members`, `$1`)\nnên luôn thất bại 500 trên MySQL/Vitess. Hiện không thể gỡ thành viên qua API này.",
-   "status": "broken",
+   "summary": "Gỡ thành viên khỏi tổ chức",
+   "description": "Chỉ owner/admin; admin không gỡ được owner; không gỡ owner cuối cùng (409). Xoá hàng `system_organization_members`.",
+   "status": "implemented",
    "auth": "bearer",
    "permissions": [
     "org-admin"
@@ -2309,11 +2471,12 @@
    "method": "GET",
    "path": "/platform/organizations/{id}/user-pools",
    "summary": "Liệt kê user pool của tổ chức",
-   "description": "Chỉ owner/admin của tổ chức (developer bị từ chối bằng lỗi text). Đọc `auth_user_pools` theo `organization_id`.",
+   "description": "Owner/admin của tổ chức hoặc superuser (không cần là thành viên); developer và người ngoài bị từ chối 403. Đọc `auth_user_pools` theo `organization_id`.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
-    "org-admin"
+    "org-admin",
+    "superuser"
    ],
    "parameters": [
     {
@@ -2329,7 +2492,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Danh sách pool, hoặc lỗi text với mã 200."
+    "200": "Danh sách pool.",
+    "403": "Người gọi không thuộc tổ chức hoặc là developer (thân text `Unauthorized…`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -2379,7 +2544,9 @@
     }
    },
    "responses": {
-    "200": "Pool vừa tạo; lỗi text với mã 200."
+    "200": "Pool vừa tạo.",
+    "403": "Người gọi không phải owner/admin của tổ chức (thân text `Unauthorized…`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -2520,7 +2687,7 @@
    "method": "DELETE",
    "path": "/platform/projects/{ref}",
    "summary": "Xoá project cùng toàn bộ dữ liệu",
-   "description": "Chỉ owner của tổ chức (hoặc superuser) được xoá. Thực hiện tuần tự: xoá ràng buộc pool, client OAuth, user pool (keyspace `auth`); gỡ keyspace Vitess (`<ref>`, `<ref>s` và `keyspace_name`),\nxoá user và database `p_<ref>`, xoá route schema, rồi xoá hàng `system_projects`. Bước dọn tài nguyên hạ tầng chỉ ghi cảnh báo nếu lỗi và không chặn. Không hoàn tác.",
+   "description": "Chỉ owner của tổ chức (hoặc superuser) được xoá. Thực hiện tuần tự: xoá ràng buộc pool, client OAuth, user pool (keyspace `auth`); gỡ Ingress, Service và Deployment của mọi app của project (như `undeploy_app`); gỡ keyspace Vitess (`<ref>`, `<ref>s` và `keyspace_name`),\nxoá user và database `p_<ref>`, xoá route schema, rồi xoá hàng `system_projects`. Bước dọn tài nguyên hạ tầng chỉ ghi cảnh báo nếu lỗi và không chặn. Không hoàn tác.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -2539,7 +2706,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "`null` khi thành công; lỗi dạng text với mã 200."
+    "200": "`null` khi thành công.",
+    "403": "Người gọi không phải owner của tổ chức và không phải superuser (thân text `Unauthorized: Only owners can delete projects`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -2547,7 +2716,7 @@
    "method": "GET",
    "path": "/platform/projects/{ref}",
    "summary": "Lấy thông tin một project",
-   "description": "Yêu cầu người gọi có quyền truy cập project (thành viên tổ chức sở hữu, hoặc superuser). Lỗi trả HTTP 200 dạng text.",
+   "description": "Yêu cầu người gọi có quyền truy cập project (thành viên tổ chức sở hữu, hoặc superuser). Lỗi trả text với mã thật (403, 500).",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -2566,7 +2735,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Project, hoặc thông báo lỗi dạng text (`Unauthorized`, lỗi DB) với cùng mã 200."
+    "200": "Project.",
+    "403": "Người gọi không thuộc project (thân text `Unauthorized`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -2607,19 +2778,22 @@
     }
    },
    "responses": {
-    "200": "Project sau cập nhật, hoặc lỗi dạng text với mã 200."
+    "200": "Project sau cập nhật.",
+    "400": "Không có trường nào để cập nhật (thân text `No update fields provided`).",
+    "403": "Người gọi không phải owner/admin của tổ chức (thân text `Unauthorized…`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
    "operationId": "list_apps",
    "method": "GET",
    "path": "/platform/projects/{ref}/apps",
-   "summary": "Liệt kê app của project (công khai)",
-   "description": "Trả `[{app_code, app_name, domain, description, ui_framework}]`. Quyền đọc dùng `require_project_read_access` nên khách ẩn danh cũng đọc được. `ui_framework` thiếu thì hiện `dioxus` (di sản).",
+   "summary": "Liệt kê app của project",
+   "description": "Trả `[{app_code, app_name, domain, description, ui_framework}]`. Quyền: `project-user` (thành viên project, hoặc người có vai trò gán ở project); ẩn danh nhận 401. `ui_framework` thiếu thì hiện `dioxus` (di sản).",
    "status": "implemented",
-   "auth": "none",
+   "auth": "bearer-or-internal",
    "permissions": [
-    "public"
+    "project-user"
    ],
    "parameters": [
     {
@@ -2707,12 +2881,12 @@
    "operationId": "get_app",
    "method": "GET",
    "path": "/platform/projects/{ref}/apps/{code}",
-   "summary": "Lấy cấu hình một app (công khai)",
+   "summary": "Lấy cấu hình một app",
    "description": "Như `list_apps` cho một `app_code`. Frontend dùng để tìm domain/ui_framework của app.",
    "status": "implemented",
-   "auth": "none",
+   "auth": "bearer-or-internal",
    "permissions": [
-    "public"
+    "project-user"
    ],
    "parameters": [
     {
@@ -3253,7 +3427,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3301,6 +3475,7 @@
    "responses": {
     "200": "Phiên bản đã publish.",
     "401": "Không xác định được người gọi.",
+    "403": "Người gọi không phải owner/admin của project.",
     "404": "Phiên bản không tồn tại.",
     "422": "Phiên bản chưa valid, hoặc vai trò tham chiếu không còn."
    }
@@ -3342,7 +3517,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3370,6 +3545,7 @@
     "200": "Thành công.",
     "201": "`{function, version}` do control plane trả.",
     "400": "Thiếu Content-Type hoặc multipart hỏng.",
+    "403": "Người gọi không phải owner/admin của project.",
     "413": "Thân vượt 50 MB.",
     "422": "Bundle/chữ ký/manifest không hợp lệ.",
     "502": "Không gọi được compute-control-plane."
@@ -3384,7 +3560,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3410,6 +3586,7 @@
    "requestBody": null,
    "responses": {
     "200": "Đã xoá.",
+    "403": "Người gọi không phải owner/admin của project.",
     "404": "Không có function.",
     "502": "Không gọi được compute-control-plane."
    }
@@ -3423,7 +3600,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3473,6 +3650,7 @@
    },
    "responses": {
     "200": "Function sau cập nhật.",
+    "403": "Người gọi không phải owner/admin của project.",
     "404": "Không có function.",
     "422": "Giá trị ngoài khoảng.",
     "502": "Không gọi được compute-control-plane."
@@ -3611,7 +3789,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3638,6 +3816,7 @@
    },
    "responses": {
     "200": "Mảnh đã lưu.",
+    "403": "Người gọi không phải owner/admin của project.",
     "502": "Không gọi được compute-control-plane."
    }
   },
@@ -3678,7 +3857,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3743,6 +3922,7 @@
     "200": "Thành công.",
     "201": "Binding đã tạo/cập nhật.",
     "400": "`auth_mode` hoặc UUID không hợp lệ; phiên bản chưa kích hoạt.",
+    "403": "Người gọi không phải owner/admin của project.",
     "502": "Không gọi được compute-control-plane."
    }
   },
@@ -3755,7 +3935,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3781,6 +3961,7 @@
    "requestBody": null,
    "responses": {
     "200": "Đã xoá.",
+    "403": "Người gọi không phải owner/admin của project.",
     "502": "Không gọi được compute-control-plane."
    }
   },
@@ -3793,7 +3974,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3819,6 +4000,7 @@
    "requestBody": null,
    "responses": {
     "200": "Phiên bản đã kích hoạt.",
+    "403": "Người gọi không phải owner/admin của project.",
     "404": "Không có phiên bản.",
     "502": "Không gọi được compute-control-plane."
    }
@@ -3862,7 +4044,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -3905,7 +4087,7 @@
    "responses": {
     "200": "Đã khôi phục.",
     "400": "`project_ref` sai hoặc không có tệp.",
-    "403": "Không phải thành viên project.",
+    "403": "Người gọi không phải owner/admin của project.",
     "422": "Câu lệnh ngoài phạm vi cho phép hoặc lỗi SQL (đã dừng, không rollback).",
     "500": "Lỗi máy chủ nội bộ."
    }
@@ -3948,7 +4130,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -4021,7 +4203,7 @@
    "responses": {
     "200": "Định nghĩa thực thể sau khi lưu.",
     "400": "`ref` hoặc `entity_code` không phải định danh an toàn.",
-    "403": "Không phải thành viên project.",
+    "403": "Người gọi không phải owner/admin của project.",
     "422": "Thiếu tên/field, `data_type` lạ, `field_code` trùng cột hệ thống, relation thiếu `target_entity_code`.",
     "500": "Lỗi DDL (giao dịch được rollback)."
    }
@@ -4030,12 +4212,12 @@
    "operationId": "get_entity",
    "method": "GET",
    "path": "/platform/projects/{ref}/entities/{code}",
-   "summary": "Lấy định nghĩa thực thể (công khai)",
-   "description": "Trả `{entity_code, entity_name, description, fields[]}` với field sắp theo `display_order`. Quyền đọc dùng `require_project_read_access`: người gọi KHÔNG có token hoặc token hỏng vẫn đọc được (coi là khách ẩn danh), trừ project `system` cần superuser.\nFrontend công khai cần metadata này để dựng form/nhãn.",
+   "summary": "Lấy định nghĩa thực thể",
+   "description": "Trả `{entity_code, entity_name, description, fields[]}` với field sắp theo `display_order`. Quyền: action `read` của thực thể theo ma trận (cùng quy tắc với `list_records`, xem conventions mục \"Ma trận quyền thực thể\"): metadata công khai chỉ khi ma trận có vai trò công khai chứa `read`; ngược lại cần đăng nhập và đủ quyền.",
    "status": "implemented",
-   "auth": "none",
+   "auth": "bearer-or-internal",
    "permissions": [
-    "public"
+    "entity:read"
    ],
    "parameters": [
     {
@@ -4060,6 +4242,8 @@
    "requestBody": null,
    "responses": {
     "200": "Định nghĩa thực thể.",
+    "401": "Cần đăng nhập (thực thể không công khai).",
+    "403": "Không đủ quyền đọc thực thể.",
     "404": "Thực thể không tồn tại."
    }
   },
@@ -4661,11 +4845,11 @@
    "method": "POST",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/assignees",
    "summary": "Giao bản ghi cho một người dùng",
-   "description": "INSERT IGNORE theo (entity, record, assignee). Không kiểm tra `assignee_id` thuộc project; nhãn lấy theo email người dùng. Chỉ cần phiên hợp lệ.",
+   "description": "INSERT IGNORE theo (entity, record, assignee). Không kiểm tra `assignee_id` thuộc project; nhãn lấy theo email người dùng. Quyền `write` của thực thể.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:write"
    ],
    "parameters": [
     {
@@ -4719,6 +4903,7 @@
     "200": "Người được giao.",
     "400": "`assignee_id` không hợp lệ.",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `write` trên thực thể (hoặc tài khoản không thuộc project).",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -4727,11 +4912,11 @@
    "method": "DELETE",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/assignees/{assignee_id}",
    "summary": "Bỏ người phụ trách khỏi bản ghi",
-   "description": "Xoá hàng gán. Trả `{deleted:true}` kể cả khi không có. Chỉ cần phiên hợp lệ.",
+   "description": "Xoá hàng gán. Trả `{deleted:true}` kể cả khi không có. Quyền `write` của thực thể.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:write"
    ],
    "parameters": [
     {
@@ -4777,6 +4962,7 @@
     "200": "Đã bỏ.",
     "400": "`assignee_id` không hợp lệ.",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `write` trên thực thể (hoặc tài khoản không thuộc project).",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -4902,11 +5088,11 @@
    "method": "DELETE",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/attachments/{att_id}",
    "summary": "Xoá tệp đính kèm",
-   "description": "Xoá hàng `record_attachments` rồi xoá đối tượng trong storage (best-effort). Chỉ cần phiên hợp lệ, không kiểm tra thành viên project hay quyền ghi thực thể.",
+   "description": "Xoá hàng `record_attachments` rồi xoá đối tượng trong storage (best-effort). Quyền `write` của thực thể.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:write"
    ],
    "parameters": [
     {
@@ -4952,6 +5138,7 @@
     "200": "Đã xoá.",
     "400": "`att_id` không phải UUID.",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `write` trên thực thể (hoặc tài khoản không thuộc project).",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -5020,7 +5207,8 @@
     "400": "Tham số không hợp lệ.",
     "401": "Thiếu token.",
     "404": "Không có tệp.",
-    "502": "Đổi token hoặc đọc storage thất bại."
+    "403": "Người gọi không thuộc project (auth-service từ chối đổi token storage).",
+    "502": "Đổi token (khác từ chối quyền) hoặc đọc storage thất bại."
    }
   },
   {
@@ -5076,11 +5264,11 @@
    "method": "POST",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/comments",
    "summary": "Thêm bình luận vào bản ghi",
-   "description": "Cần một phiên hợp lệ bất kỳ; KHÔNG kiểm tra người gọi là thành viên project hay có quyền đọc/ghi thực thể. Nội dung 1 đến 5000 ký tự. Nhãn tác giả lấy từ email người dùng.",
+   "description": "Quyền `read` của thực thể. Nội dung 1 đến 5000 ký tự. Nhãn tác giả lấy từ email người dùng.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:read"
    ],
    "parameters": [
     {
@@ -5135,6 +5323,7 @@
     "201": "Bình luận vừa tạo.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `read` trên thực thể (hoặc tài khoản không thuộc project).",
     "422": "Nội dung trống hoặc quá dài.",
     "500": "Lỗi máy chủ nội bộ."
    }
@@ -5250,11 +5439,11 @@
    "method": "POST",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/tags",
    "summary": "Gắn thẻ vào bản ghi",
-   "description": "Chuẩn hoá thẻ (gộp khoảng trắng, cắt còn 64 ký tự); trùng thì bỏ qua (INSERT IGNORE). Chỉ cần phiên hợp lệ, không kiểm tra thành viên project.",
+   "description": "Chuẩn hoá thẻ (gộp khoảng trắng, cắt còn 64 ký tự); trùng thì bỏ qua (INSERT IGNORE). Quyền `write` của thực thể.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:write"
    ],
    "parameters": [
     {
@@ -5308,6 +5497,7 @@
     "200": "Thẻ đã gắn (đã chuẩn hoá).",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `write` trên thực thể (hoặc tài khoản không thuộc project).",
     "422": "Thẻ rỗng.",
     "500": "Lỗi máy chủ nội bộ."
    }
@@ -5317,11 +5507,11 @@
    "method": "DELETE",
    "path": "/platform/projects/{ref}/entities/{code}/records/{id}/tags/{tag}",
    "summary": "Gỡ thẻ khỏi bản ghi",
-   "description": "Xoá thẻ (đã chuẩn hoá). Trả `{deleted:true}` kể cả khi thẻ không có. Chỉ cần phiên hợp lệ.",
+   "description": "Xoá thẻ (đã chuẩn hoá). Trả `{deleted:true}` kể cả khi thẻ không có. Quyền `write` của thực thể.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "entity:write"
    ],
    "parameters": [
     {
@@ -5365,6 +5555,7 @@
    "responses": {
     "200": "Đã gỡ.",
     "401": "Cần đăng nhập.",
+    "403": "Không đủ quyền `write` trên thực thể (hoặc tài khoản không thuộc project).",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -5648,11 +5839,11 @@
    "method": "GET",
    "path": "/platform/projects/{ref}/members",
    "summary": "Liệt kê thành viên project (để chọn người phụ trách)",
-   "description": "Hợp của người dùng có vai trò gán trong project (`system_user_role_assignments`) và thành viên organization sở hữu project, mỗi người kèm nhãn hiển thị (email). Chỉ cần phiên hợp lệ; KHÔNG kiểm tra người gọi thuộc project.",
+   "description": "Hợp của người dùng có vai trò gán trong project (`system_user_role_assignments`) và thành viên organization sở hữu project, mỗi người kèm nhãn hiển thị (email). Người gọi phải là `project-user`.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "authenticated"
+    "project-user"
    ],
    "parameters": [
     {
@@ -5669,6 +5860,7 @@
    "responses": {
     "200": "Danh sách `{id, label}` sắp theo nhãn.",
     "401": "Cần đăng nhập.",
+    "403": "Người gọi không thuộc project.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -5738,7 +5930,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -5796,7 +5988,7 @@
    },
    "responses": {
     "200": "Kết quả gộp.",
-    "403": "Không phải thành viên project.",
+    "403": "Người gọi không phải owner/admin của project.",
     "422": "YAML sai, module không tồn tại ở thực thể nào.",
     "500": "Lỗi máy chủ nội bộ."
    }
@@ -5825,7 +6017,11 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Project với `storage_status: provisioning`, hoặc lỗi text với mã 200."
+    "200": "Project với `storage_status: provisioning`.",
+    "403": "Người gọi không phải owner của tổ chức (thân text `Unauthorized…`).",
+    "404": "Project không tồn tại (thân text `Project not found`).",
+    "409": "Project đã có lưu trữ riêng, hoặc đang chuyển (thân text).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -5872,7 +6068,9 @@
     }
    },
    "responses": {
-    "200": "Project, hoặc lỗi text với mã 200."
+    "200": "Project.",
+    "403": "Người gọi không phải owner của tổ chức (thân text `Unauthorized: Only owners can change project storage`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -5899,7 +6097,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Project sau khi quay lui, hoặc lỗi text với mã 200."
+    "200": "Project sau khi quay lui.",
+    "403": "Người gọi không phải owner của tổ chức (thân text `Unauthorized: Only owners can change project storage`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -5946,7 +6146,9 @@
     }
    },
    "responses": {
-    "200": "Project (trạng thái có thể chưa đổi vì tác vụ chạy nền), hoặc lỗi text với mã 200."
+    "200": "Project (trạng thái có thể chưa đổi vì tác vụ chạy nền).",
+    "403": "Người gọi không phải owner của tổ chức (thân text `Unauthorized: Only owners can change project storage`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -5973,7 +6175,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Project sau khi huỷ, hoặc lỗi text với mã 200."
+    "200": "Project sau khi huỷ.",
+    "403": "Người gọi không phải owner của tổ chức (thân text `Unauthorized: Only owners can change project storage`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -6000,7 +6204,9 @@
    ],
    "requestBody": null,
    "responses": {
-    "200": "Mức dùng; lỗi text với mã 200."
+    "200": "Mức dùng.",
+    "403": "Người gọi không thuộc project (thân text `Unauthorized`).",
+    "500": "Lỗi truy vấn hoặc hạ tầng (thân text là thông báo lỗi)."
    }
   },
   {
@@ -6049,7 +6255,8 @@
     "201": "Đã lưu.",
     "401": "Thiếu Bearer thật.",
     "422": "Thân rỗng hoặc quá 15 MB.",
-    "502": "Đổi token hoặc upload thất bại."
+    "403": "Người gọi không thuộc project (auth-service từ chối đổi token storage).",
+    "502": "Đổi token (khác từ chối quyền) hoặc upload thất bại."
    }
   },
   {
@@ -6097,7 +6304,8 @@
     "200": "Nội dung tệp.",
     "400": "`key` không hợp lệ.",
     "401": "Thiếu token.",
-    "502": "Đổi token hoặc đọc storage thất bại."
+    "403": "Người gọi không thuộc project (auth-service từ chối đổi token storage).",
+    "502": "Đổi token (khác từ chối quyền) hoặc đọc storage thất bại."
    }
   },
   {
@@ -6144,7 +6352,7 @@
    "method": "GET",
    "path": "/platform/regions",
    "summary": "Liệt kê vùng triển khai công khai (hiện hỏng)",
-   "description": "Đọc bảng `system.database_connections`, bảng này không còn tồn tại sau khi chuyển sang Vitess. Mọi lời gọi trả HTTP 200 với thân text là lỗi cơ sở dữ liệu\n(`1146 Table 'system.database_connections' doesn't exist`). Không có chức năng chọn vùng nào dùng đến nó; `create_project` bỏ qua `region_id`. Yêu cầu Bearer.",
+   "description": "Đọc bảng `system.database_connections`, bảng này không còn tồn tại sau khi chuyển sang Vitess. Mọi lời gọi trả HTTP 500 với thân text là lỗi cơ sở dữ liệu\n(`1146 Table 'system.database_connections' doesn't exist`). Không có chức năng chọn vùng nào dùng đến nó; `create_project` bỏ qua `region_id`. Yêu cầu Bearer.",
    "status": "broken",
    "auth": "bearer",
    "permissions": [
@@ -6153,8 +6361,92 @@
    "parameters": [],
    "requestBody": null,
    "responses": {
-    "200": "Hiện luôn là thông báo lỗi dạng text; thiết kế ban đầu trả mảng vùng.",
-    "401": "Thiếu hoặc sai thông tin xác thực."
+    "200": "Thiết kế ban đầu trả mảng vùng; hiện không bao giờ thành công.",
+    "401": "Thiếu hoặc sai thông tin xác thực.",
+    "500": "Truy vấn bảng không tồn tại (thân text `1146 Table 'system.database_connections' doesn't exist`)."
+   }
+  },
+  {
+   "operationId": "submit_registration",
+   "method": "POST",
+   "path": "/platform/registrations",
+   "summary": "Gửi yêu cầu đăng ký tài khoản nền tảng (chờ duyệt)",
+   "description": "Công khai, không cần xác thực. Lưu một yêu cầu ở trạng thái `pending` vào `system_registration_requests`; chưa tạo người dùng hay tổ chức. Khi superuser duyệt (`approve_registration`), hệ thống tạo người dùng trong System Auth Pool và tổ chức đầu tiên (`organization_name`) có người đó làm `owner`. Một tài khoản không bị giới hạn ở một tổ chức: sau khi đăng nhập, người đó tự tạo thêm tổ chức bằng `create_organization` (mỗi tổ chức mới cũng có họ làm `owner`).\nMật khẩu chỉ được lưu dưới dạng băm bcrypt, không bao giờ lưu hoặc trả lại bản rõ. Chính sách: 8 đến 72 byte, không trùng email. `email` được chuẩn hoá thành chữ thường.\nLuôn trả `202` với yêu cầu hợp lệ, kể cả khi email đã có tài khoản hoặc đã có yêu cầu chờ (không lộ email nào đã đăng ký); xung đột chỉ phát hiện ở bước duyệt. Mỗi email tối đa 3 yêu cầu `pending` cùng lúc (yêu cầu vượt quá vẫn trả `202` nhưng không lưu thêm).\nGiới hạn tần suất: tối đa 5 yêu cầu mỗi giờ cho mỗi địa chỉ IP (lấy phần tử ngoài cùng bên phải của `X-Forwarded-For`), bộ đếm trong bộ nhớ của từng bản console-api.",
+   "status": "implemented",
+   "auth": "none",
+   "permissions": [
+    "public"
+   ],
+   "parameters": [],
+   "requestBody": {
+    "required": true,
+    "content": {
+     "application/json": {
+      "schema": {
+       "type": "object",
+       "properties": {
+        "email": {
+         "type": "string",
+         "description": "Email đăng nhập (sẽ thành tài khoản System Auth Pool)."
+        },
+        "password": {
+         "type": "string",
+         "description": "Mật khẩu, 8 đến 72 byte."
+        },
+        "full_name": {
+         "type": "string",
+         "description": "Họ tên, 1 đến 120 ký tự."
+        },
+        "organization_name": {
+         "type": "string",
+         "description": "Tên tổ chức đầu tiên, tạo khi duyệt, 2 đến 80 ký tự. Tổ chức khác tạo sau bằng `create_organization`."
+        }
+       },
+       "required": [
+        "email",
+        "password",
+        "full_name",
+        "organization_name"
+       ]
+      }
+     }
+    }
+   },
+   "responses": {
+    "202": "`{ id }` — UUID ngẫu nhiên, dùng để xem trạng thái ở `get_registration_status`.",
+    "400": "Dữ liệu sai: `INVALID_EMAIL`, `WEAK_PASSWORD`, `INVALID_FULL_NAME`, `INVALID_ORGANIZATION_NAME`.",
+    "429": "Quá giới hạn tần suất (`RATE_LIMITED`), kèm `Retry-After`.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
+   "operationId": "get_registration_status",
+   "method": "GET",
+   "path": "/platform/registrations/{id}",
+   "summary": "Xem trạng thái một yêu cầu đăng ký",
+   "description": "Công khai; chỉ người biết `id` (UUID ngẫu nhiên do `submit_registration` trả) mới xem được. Không trả email, họ tên, tên tổ chức hay bất kỳ dữ liệu cá nhân nào, và không có cách liệt kê.\nTrạng thái: `pending` (chờ duyệt), `approved` (đã tạo tài khoản và tổ chức, đăng nhập Console được), `rejected` (kèm `rejection_reason`).",
+   "status": "implemented",
+   "auth": "none",
+   "permissions": [
+    "public"
+   ],
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "description": "UUID của yêu cầu.",
+     "schema": {
+      "type": "string",
+      "format": "uuid"
+     }
+    }
+   ],
+   "requestBody": null,
+   "responses": {
+    "200": "`{ status, rejection_reason, submitted_at, reviewed_at }`.",
+    "404": "Không có yêu cầu với `id` này.",
+    "500": "Lỗi máy chủ nội bộ."
    }
   },
   {
@@ -6162,11 +6454,11 @@
    "method": "GET",
    "path": "/platform/storage/summary",
    "summary": "Số project theo từng tầng lưu trữ trên toàn cụm",
-   "description": "Đếm `system_projects` theo `storage_mode` để lập kế hoạch dung lượng. Bất kỳ người dùng đã đăng nhập nào cũng gọi được, không cần là superuser.",
+   "description": "Đếm `system_projects` theo `storage_mode` để lập kế hoạch dung lượng. Chỉ superuser.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
-    "authenticated"
+    "superuser"
    ],
    "parameters": [],
    "requestBody": null,
@@ -6239,7 +6531,7 @@
    "method": "GET",
    "path": "/pool-admin/check-superuser",
    "summary": "Người gọi có phải superuser không",
-   "description": "Trả `true`/`false` theo `auth_users.role` (`superuser` hoặc `service_role`). Lưu ý tiêu chí này hẹp hơn `check_superuser` ở các nơi khác (không tính `is_super_admin`).",
+   "description": "Trả `true`/`false` theo định nghĩa superuser chung của console-api: `auth_users.is_super_admin` là true, hoặc `auth_users.role` là `superuser` hoặc `service_role`. Cùng định nghĩa với mọi thao tác khác kiểm superuser (`list_organizations`, `delete_organization`, thao tác `/system/*`…).",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -6257,11 +6549,12 @@
    "method": "GET",
    "path": "/pool-admin/orgs/{org_id}/pools",
    "summary": "Liệt kê pool của một tổ chức (kèm pool toàn cục)",
-   "description": "`org_id` có thể là UUID tổ chức hoặc chuỗi `global`. `global`: chỉ superuser, trả pool không thuộc tổ chức nào. UUID: thành viên owner/admin (developer và người ngoài bị từ chối), trả pool của tổ chức CỘNG pool toàn cục (`organization_id IS NULL`).",
+   "description": "`org_id` có thể là UUID tổ chức hoặc chuỗi `global`. `global`: chỉ superuser, trả pool không thuộc tổ chức nào. UUID: thành viên owner/admin hoặc superuser (developer và người ngoài bị từ chối), trả pool của tổ chức CỘNG pool toàn cục (`organization_id IS NULL`).",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-admin"
+    "org-admin",
+    "superuser"
    ],
    "parameters": [
     {
@@ -6436,11 +6729,11 @@
    "method": "GET",
    "path": "/pool-admin/pools/{pool_id}/clients",
    "summary": "Liệt kê client OAuth của pool",
-   "description": "Trả `PoolClient` gồm `client_secret` (nếu có), `redirect_uris` và hạn token. Chỉ cần quyền vào pool.",
+   "description": "Trả `PoolClient` gồm `client_secret` (nếu có), `redirect_uris` và hạn token. Chỉ `owner`/`admin` của tổ chức (hoặc superuser): phản hồi chứa `client_secret`.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-member"
+    "org-admin"
    ],
    "parameters": [
     {
@@ -6559,7 +6852,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-member"
+    "org-admin"
    ],
    "parameters": [
     {
@@ -6607,7 +6900,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-member"
+    "org-admin"
    ],
    "parameters": [
     {
@@ -6660,7 +6953,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-member"
+    "org-admin"
    ],
    "parameters": [
     {
@@ -6775,7 +7068,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "org-member"
+    "org-admin"
    ],
    "parameters": [
     {
@@ -6802,7 +7095,7 @@
    "method": "POST",
    "path": "/pool-admin/pools/{pool_id}/users",
    "summary": "Tạo người dùng trong pool (qua auth-service)",
-   "description": "Cần owner/admin của pool. Proxy sang `create_auth_user` (`POST /auth/admin/users`) của auth-service bằng `access_token` do người gọi đưa trong THÂN và `x-project-ref` = `project_ref` (mặc định `system`).\nThiếu email, mật khẩu hoặc `access_token` thì 400. Dùng khi dựng tài khoản nhân viên cho tenant.",
+   "description": "Cần owner/admin của pool. Proxy sang `create_auth_user` (`POST /auth/admin/users`) của auth-service bằng credential dịch vụ nội bộ của console-api (sau khi tự kiểm owner/admin của pool) và `x-project-ref` = `project_ref` (mặc định `system`). Trường `access_token` trong thân không còn dùng (bỏ qua, giữ để tương thích).\nThiếu email hoặc mật khẩu thì 400. Dùng khi dựng tài khoản nhân viên cho tenant.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -6852,8 +7145,7 @@
         "email",
         "password",
         "auto_confirm",
-        "project_ref",
-        "access_token"
+        "project_ref"
        ]
       }
      }
@@ -6914,7 +7206,7 @@
    "method": "PUT",
    "path": "/pool-admin/pools/{pool_id}/users/{user_id}/ban",
    "summary": "Khoá hoặc mở khoá người dùng (qua auth-service)",
-   "description": "Cần owner/admin của pool. Proxy sang `PUT /auth/admin/users/{user_id}` với `{ban_duration}` (`none` để mở khoá; mặc định `none`) và `access_token` trong thân.",
+   "description": "Cần owner/admin của pool. Proxy sang `PUT /auth/admin/users/{user_id}` với `{ban_duration}` (`none` để mở khoá; mặc định `none`), bằng credential dịch vụ nội bộ của console-api (không dùng token người gọi). `user_id` phải thuộc `pool_id`, nếu không trả 404. Trường `access_token` trong thân không còn dùng (bỏ qua).",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -6963,8 +7255,7 @@
         }
        },
        "required": [
-        "project_ref",
-        "access_token"
+        "project_ref"
        ]
       }
      }
@@ -6974,6 +7265,7 @@
     "200": "Đã áp dụng.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "403": "Không phải owner/admin.",
+    "404": "Người dùng không thuộc pool.",
     "500": "Lỗi máy chủ nội bộ.",
     "502": "auth-service lỗi."
    }
@@ -7024,7 +7316,7 @@
    "method": "POST",
    "path": "/pool-admin/pools/{pool_id}/users/{user_id}/delete",
    "summary": "Xoá người dùng của pool (qua auth-service)",
-   "description": "Dùng POST (không phải DELETE) vì có thân. Cần owner/admin của pool. Proxy sang `DELETE /auth/admin/users/{user_id}` của auth-service bằng `access_token` trong thân. Không kiểm tra `user_id` thuộc `pool_id` ở phía console-api.",
+   "description": "Dùng POST (không phải DELETE) vì có thân. Cần owner/admin của pool. Proxy sang `DELETE /auth/admin/users/{user_id}` của auth-service bằng credential dịch vụ nội bộ của console-api. `user_id` phải thuộc `pool_id`, nếu không trả 404. Trường `access_token` trong thân không còn dùng (bỏ qua).",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -7069,8 +7361,7 @@
         }
        },
        "required": [
-        "project_ref",
-        "access_token"
+        "project_ref"
        ]
       }
      }
@@ -7080,6 +7371,7 @@
     "200": "Đã xoá.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "403": "Không phải owner/admin.",
+    "404": "Người dùng không thuộc pool.",
     "500": "Lỗi máy chủ nội bộ.",
     "502": "auth-service lỗi."
    }
@@ -7089,7 +7381,7 @@
    "method": "PUT",
    "path": "/pool-admin/pools/{pool_id}/users/{user_id}/password",
    "summary": "Đặt lại mật khẩu người dùng (qua auth-service)",
-   "description": "Cần owner/admin của pool. Proxy sang `PUT /auth/admin/users/{user_id}` của auth-service với `{password}` và `access_token` trong thân. Mật khẩu rỗng thì 400.",
+   "description": "Cần owner/admin của pool. Proxy sang `PUT /auth/admin/users/{user_id}` của auth-service với `{password}`, bằng credential dịch vụ nội bộ của console-api (không dùng token người gọi). `user_id` phải thuộc `pool_id`, nếu không trả 404. Trường `access_token` trong thân không còn dùng (bỏ qua). Mật khẩu rỗng thì 400.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -7139,8 +7431,7 @@
        },
        "required": [
         "password",
-        "project_ref",
-        "access_token"
+        "project_ref"
        ]
       }
      }
@@ -7150,6 +7441,7 @@
     "200": "Đã đặt lại.",
     "400": "Mật khẩu rỗng.",
     "403": "Không phải owner/admin.",
+    "404": "Người dùng không thuộc pool.",
     "500": "Lỗi máy chủ nội bộ.",
     "502": "auth-service lỗi."
    }
@@ -7163,7 +7455,7 @@
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
-    "project-member"
+    "project-manager"
    ],
    "parameters": [
     {
@@ -7213,7 +7505,7 @@
    "responses": {
     "200": "Mảng dòng kết quả hoặc `[{affected_rows}]`.",
     "400": "`X-Project-Ref` không hợp lệ hoặc `database` không hợp lệ.",
-    "403": "Không phải thành viên project (hoặc không phải superuser với project `system`).",
+    "403": "Người gọi không phải owner/admin của project (hoặc không phải superuser với project `system`).",
     "500": "Lỗi SQL; thân là thông báo lỗi của MySQL/vtgate."
    }
   },
