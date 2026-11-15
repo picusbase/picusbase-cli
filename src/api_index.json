@@ -7,7 +7,7 @@
    "method": "GET",
    "path": "/authz/projects/{ref}/permissions",
    "summary": "Danh mục khoá quyền",
-   "description": "Toàn bộ `system_permission_catalog` (dùng chung mọi project, không lọc theo `ref`), sắp theo module và action.",
+   "description": "Các khoá của `system_permission_catalog` thuộc project `ref`, tức khoá có dạng `<module>:<ref>:...` (khoá của project khác không được trả), sắp theo module và action. Bảng vẫn dùng chung về lưu trữ nhưng mỗi khoá thuộc đúng một project qua tiền tố này.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -36,7 +36,7 @@
    "method": "POST",
    "path": "/authz/projects/{ref}/permissions",
    "summary": "Thêm khoá quyền vào danh mục",
-   "description": "INSERT IGNORE vào `system_permission_catalog`. Danh mục dùng chung nên khoá do owner/admin của một project thêm hiện ở mọi project.",
+   "description": "INSERT IGNORE vào `system_permission_catalog`. `permission_key` phải bắt đầu bằng `<module>:<ref>:` (cùng `module` trong thân và `ref` trong đường dẫn), nếu không trả 422: owner/admin của một project chỉ thêm được khoá của project mình.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -93,6 +93,7 @@
    "responses": {
     "201": "Mục đã thêm (trả lại thân yêu cầu).",
     "403": "Người gọi không phải owner/admin của project.",
+    "422": "`permission_key` không bắt đầu bằng `<module>:<ref>:`.",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -1028,9 +1029,9 @@
    "operationId": "meta_generate_typescript",
    "method": "GET",
    "path": "/meta/generators/typescript",
-   "summary": "Sinh kiểu TypeScript từ schema (hiện cho giao diện rỗng)",
-   "description": "Đọc `information_schema` rồi sinh `export interface <Bảng> { ... }` (kiểu `text/plain`). Ghép cột vào bảng bằng `column.table_id == table.id`, nhưng `table_id` luôn 0 còn `table.id` bắt đầu từ 1,\nnên theo mã nguồn mọi interface đều RỖNG (suy ra từ mã, chưa chạy thử với dữ liệu thật). Dùng `picusbase gen types` của CLI cho kiểu thực thể.",
-   "status": "broken",
+   "summary": "Sinh kiểu TypeScript từ schema",
+   "description": "Đọc `information_schema` của database của project rồi sinh `export interface <Bảng> { ... }` (kiểu `text/plain`), mỗi cột một dòng `<tên>: <kiểu>` (thêm `| null` khi cột cho phép NULL). Cột được ghép vào bảng theo cặp (schema, tên bảng). Kiểu: số nguyên, `DECIMAL`, `FLOAT`, `DOUBLE` là `number`; `tinyint(1)` là `boolean`; `json` là `Json`; còn lại (chữ, ngày giờ, UUID nhị phân) là `string`. Dùng `picusbase gen types` của CLI cho kiểu thực thể.",
+   "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
     "project-member"
@@ -1422,126 +1423,6 @@
    "requestBody": null,
    "responses": {
     "200": "Sống."
-   }
-  },
-  {
-   "operationId": "meta_get_io_stats",
-   "method": "GET",
-   "path": "/meta/system/io",
-   "summary": "Thống kê I/O (hiện hỏng)",
-   "description": "Dùng `pg_stat_database` và ép kiểu `::float`; luôn 500 (đã xác nhận). Quyền: superuser nền tảng.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [
-    {
-     "name": "X-Project-Ref",
-     "in": "header",
-     "required": false,
-     "description": "Project đích; chỉ chữ/số/gạch dưới. Mặc định `tenant_001`.",
-     "schema": {
-      "type": "string"
-     }
-    }
-   ],
-   "requestBody": null,
-   "responses": {
-    "200": "Thành công.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
-   }
-  },
-  {
-   "operationId": "meta_get_connection_load",
-   "method": "GET",
-   "path": "/meta/system/load",
-   "summary": "Tải kết nối (hiện hỏng)",
-   "description": "Chạy SQL kiểu PostgreSQL (`pg_stat_activity`, `FILTER`) nên luôn 500 `syntax error` trên MySQL/Vitess (đã xác nhận trên cụm local). Quyền: superuser nền tảng. Thay thế: `get_system_db_health`.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [
-    {
-     "name": "X-Project-Ref",
-     "in": "header",
-     "required": false,
-     "description": "Project đích; chỉ chữ/số/gạch dưới. Mặc định `tenant_001`.",
-     "schema": {
-      "type": "string"
-     }
-    }
-   ],
-   "requestBody": null,
-   "responses": {
-    "200": "Thành công.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
-   }
-  },
-  {
-   "operationId": "meta_get_slow_queries",
-   "method": "GET",
-   "path": "/meta/system/queries",
-   "summary": "Truy vấn chậm (hiện hỏng)",
-   "description": "Dùng `pg_stat_statements` và `::text`; luôn 500 (đã xác nhận). Quyền: superuser nền tảng. Thay thế (rỗng): `get_system_slow_queries`.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [
-    {
-     "name": "X-Project-Ref",
-     "in": "header",
-     "required": false,
-     "description": "Project đích; chỉ chữ/số/gạch dưới. Mặc định `tenant_001`.",
-     "schema": {
-      "type": "string"
-     }
-    }
-   ],
-   "requestBody": null,
-   "responses": {
-    "200": "Thành công.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
-   }
-  },
-  {
-   "operationId": "meta_get_tenant_stats",
-   "method": "GET",
-   "path": "/meta/system/tenants",
-   "summary": "Thống kê tenant (hiện hỏng)",
-   "description": "Dùng `system.schema_routes` và `::bigint`; luôn 500 (đã xác nhận). Quyền: superuser nền tảng.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [
-    {
-     "name": "X-Project-Ref",
-     "in": "header",
-     "required": false,
-     "description": "Project đích; chỉ chữ/số/gạch dưới. Mặc định `tenant_001`.",
-     "schema": {
-      "type": "string"
-     }
-    }
-   ],
-   "requestBody": null,
-   "responses": {
-    "200": "Thành công.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
    }
   },
   {
@@ -1960,7 +1841,7 @@
     }
    },
    "responses": {
-    "200": "Metadata token và bí mật (xem một lần).",
+    "200": "Các trường của token (như một phần tử của `list_access_tokens`) và `secret` (xem một lần), cùng một cấp, không lồng trong `token`.",
     "400": "Tên rỗng/quá dài, `expires_in_days` ngoài khoảng, `mcp_scope` hoặc `mcp_access` sai dạng."
    }
   },
@@ -2257,7 +2138,7 @@
    "method": "DELETE",
    "path": "/platform/organizations/{id}",
    "summary": "Xoá tổ chức cùng mọi project",
-   "description": "Owner của tổ chức, hoặc superuser nền tảng (không cần là thành viên, dùng để dọn tổ chức mồ côi). Với từng project của tổ chức thực hiện đúng quy trình `delete_project` (xoá tài nguyên xác thực, gỡ keyspace, drop database/user). Sau đó xoá các user pool cấp tổ chức còn lại (`auth_user_pools.organization_id` = tổ chức, gồm pool mặc định `<tên> Default Pool`): ràng buộc `auth_pool_bindings`, client OAuth `auth_oauth_clients` và hàng pool. Cuối cùng xoá hàng `system_projects`, `system_organization_members` và `system_organizations` trong một giao dịch. Người dùng trong các pool (`auth_users`) không bị xoá.\nKhông hoàn tác. Lỗi dọn tài nguyên hạ tầng chỉ ghi cảnh báo.",
+   "description": "Owner của tổ chức, hoặc superuser nền tảng (không cần là thành viên, dùng để dọn tổ chức mồ côi). Với từng project của tổ chức thực hiện đúng quy trình `delete_project` (xoá tài nguyên xác thực, gỡ keyspace, drop database/user). Sau đó xoá các user pool cấp tổ chức còn lại (`auth_user_pools.organization_id` = tổ chức, gồm pool mặc định `<tên> Default Pool`): mọi hàng `auth_*` thuộc pool (ràng buộc, client OAuth, nhà cung cấp, nhóm và thành viên nhóm, trạng thái rủi ro đăng nhập, người dùng đã xoá mềm cùng token của họ) và hàng pool. Cuối cùng xoá hàng `system_projects`, `system_organization_members` và `system_organizations` trong một giao dịch. Người dùng chưa xoá mềm trong các pool (`auth_users`) không bị xoá.\nKhông hoàn tác. Lỗi dọn tài nguyên hạ tầng chỉ ghi cảnh báo.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -2687,7 +2568,7 @@
    "method": "DELETE",
    "path": "/platform/projects/{ref}",
    "summary": "Xoá project cùng toàn bộ dữ liệu",
-   "description": "Chỉ owner của tổ chức (hoặc superuser) được xoá. Thực hiện tuần tự: xoá ràng buộc pool, client OAuth, user pool (keyspace `auth`); gỡ Ingress, Service và Deployment của mọi app của project (như `undeploy_app`); gỡ keyspace Vitess (`<ref>`, `<ref>s` và `keyspace_name`),\nxoá user và database `p_<ref>`, xoá route schema, rồi xoá hàng `system_projects`. Bước dọn tài nguyên hạ tầng chỉ ghi cảnh báo nếu lỗi và không chặn. Không hoàn tác.",
+   "description": "Chỉ owner của tổ chức (hoặc superuser) được xoá. Thực hiện tuần tự: xoá user pool của project cùng mọi hàng `auth_*` thuộc pool (ràng buộc, client OAuth, nhà cung cấp, nhóm và thành viên nhóm, trạng thái rủi ro đăng nhập, người dùng đã xoá mềm cùng token của họ; keyspace `auth`); gỡ Ingress, Service và Deployment của mọi app của project (như `undeploy_app`); xoá các pod guest của compute của project (`guest-<ref>-*`, `_` thành `-`); gỡ keyspace Vitess (`<ref>`, `<ref>s` và `keyspace_name`),\nxoá user và database `p_<ref>`, xoá route schema, rồi xoá hàng `system_projects`. Bước dọn tài nguyên hạ tầng chỉ ghi cảnh báo nếu lỗi và không chặn. Không hoàn tác.",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [
@@ -6348,25 +6229,6 @@
    }
   },
   {
-   "operationId": "list_regions",
-   "method": "GET",
-   "path": "/platform/regions",
-   "summary": "Liệt kê vùng triển khai công khai (hiện hỏng)",
-   "description": "Đọc bảng `system.database_connections`, bảng này không còn tồn tại sau khi chuyển sang Vitess. Mọi lời gọi trả HTTP 500 với thân text là lỗi cơ sở dữ liệu\n(`1146 Table 'system.database_connections' doesn't exist`). Không có chức năng chọn vùng nào dùng đến nó; `create_project` bỏ qua `region_id`. Yêu cầu Bearer.",
-   "status": "broken",
-   "auth": "bearer",
-   "permissions": [
-    "authenticated"
-   ],
-   "parameters": [],
-   "requestBody": null,
-   "responses": {
-    "200": "Thiết kế ban đầu trả mảng vùng; hiện không bao giờ thành công.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "500": "Truy vấn bảng không tồn tại (thân text `1146 Table 'system.database_connections' doesn't exist`)."
-   }
-  },
-  {
    "operationId": "submit_registration",
    "method": "POST",
    "path": "/platform/registrations",
@@ -6689,6 +6551,40 @@
     "200": "Pool mới.",
     "400": "Yêu cầu không hợp lệ (thiếu hoặc sai tham số).",
     "403": "Không đủ quyền.",
+    "500": "Lỗi máy chủ nội bộ."
+   }
+  },
+  {
+   "operationId": "delete_user_pool",
+   "method": "DELETE",
+   "path": "/pool-admin/pools/{pool_id}",
+   "summary": "Xoá user pool",
+   "description": "Cần owner/admin của tổ chức sở hữu pool, hoặc superuser. Chỉ xoá được pool không còn dùng: không project nào dùng pool (`system_projects.user_pool_id`) và không còn người dùng nào chưa bị xoá. Pool còn dùng trả 409 với thông báo nêu số project và số người dùng; không có cờ ép xoá. Pool không thuộc tổ chức nào (pool toàn cục) trả 403.\nXoá trong một giao dịch ở keyspace `auth`: client OAuth, nhà cung cấp danh tính, nhóm và thành viên nhóm, binding, trạng thái rủi ro đăng nhập, các người dùng đã xoá mềm của pool cùng refresh token, mã OAuth, personal access token của họ, rồi hàng pool. Không hoàn tác.",
+   "status": "implemented",
+   "auth": "bearer",
+   "permissions": [
+    "org-admin"
+   ],
+   "parameters": [
+    {
+     "name": "pool_id",
+     "in": "path",
+     "required": true,
+     "description": "UUID của user pool.",
+     "schema": {
+      "type": "string",
+      "format": "uuid"
+     }
+    }
+   ],
+   "requestBody": null,
+   "responses": {
+    "200": "Đã xoá.",
+    "400": "`pool_id` không phải UUID.",
+    "401": "Thiếu hoặc sai thông tin xác thực.",
+    "403": "Không phải owner/admin của tổ chức sở hữu pool (và không phải superuser), hoặc pool toàn cục.",
+    "404": "Pool không tồn tại.",
+    "409": "Pool còn project dùng hoặc còn người dùng chưa xoá (thân text nêu số lượng).",
     "500": "Lỗi máy chủ nội bộ."
    }
   },
@@ -7451,7 +7347,7 @@
    "method": "POST",
    "path": "/sql",
    "summary": "Chạy SQL tuỳ ý trên database của project",
-   "description": "Chạy một câu SQL (kèm tham số vị trí `?`) trên database của project do header `X-Project-Ref` chỉ định (mặc định `tenant_001` khi thiếu header). Dấu `;` cuối câu bị cắt.\nKết quả: câu lệnh trả tập dòng (`SELECT`, `WITH`, `VALUES`, `SHOW`, `DESCRIBE`, `EXPLAIN`, `TABLE`) trả mảng đối tượng; câu lệnh ghi trả `[{\"affected_rows\": n}]`.\n`database` chỉ có hiệu lực với project `system` (chọn database đích); giá trị khác `system` cho project thường bị từ chối 400.\nĐây là quyền rất rộng: mọi thành viên của project (kể cả vai trò developer được cấp project) chạy được DDL/DML trên toàn database của project. Dùng cho trình soạn SQL của Console, không dùng cho ứng dụng.",
+   "description": "Chạy một câu SQL (kèm tham số vị trí `?`) trên database của project do header `X-Project-Ref` chỉ định (mặc định `tenant_001` khi thiếu header). Dấu `;` cuối câu bị cắt.\nKết quả: câu lệnh trả tập dòng (`SELECT`, `WITH`, `VALUES`, `SHOW`, `DESCRIBE`, `EXPLAIN`, `TABLE`) trả mảng đối tượng; câu lệnh ghi trả `[{\"affected_rows\": n}]`.\nKiểu giá trị như `meta_run_query`: số nguyên, `FLOAT`, `DOUBLE` và `DECIMAL` (kể cả kết quả của `SUM` và `AVG`) trả number (`DECIMAL` mất độ chính xác ngoài phạm vi số thực 64 bit), `DATE`/`DATETIME` trả chuỗi, nhị phân trả base64.\n`database` chỉ có hiệu lực với project `system` (chọn database đích); giá trị khác `system` cho project thường bị từ chối 400.\nĐây là quyền rất rộng: mọi thành viên của project (kể cả vai trò developer được cấp project) chạy được DDL/DML trên toàn database của project. Dùng cho trình soạn SQL của Console, không dùng cho ứng dụng.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -7719,64 +7615,6 @@
     "401": "Không xác thực được.",
     "403": "Không phải superuser.",
     "500": "Lỗi máy chủ nội bộ."
-   }
-  },
-  {
-   "operationId": "get_system_container_metrics",
-   "method": "GET",
-   "path": "/system/metrics",
-   "summary": "Metric container gần nhất (hiện hỏng)",
-   "description": "Truy vấn `monitor.system_metrics_rowstore` bằng placeholder kiểu PostgreSQL (`$1::text`) nên luôn lỗi 500 `Internal Error` trên MySQL. Quyền: superuser nền tảng.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [
-    {
-     "name": "limit",
-     "in": "query",
-     "required": false,
-     "schema": {
-      "type": "integer",
-      "format": "int64"
-     }
-    },
-    {
-     "name": "container",
-     "in": "query",
-     "required": false,
-     "schema": {
-      "type": "string"
-     }
-    }
-   ],
-   "requestBody": null,
-   "responses": {
-    "200": "Mục tiêu: mảng metric.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
-   }
-  },
-  {
-   "operationId": "list_system_metric_containers",
-   "method": "GET",
-   "path": "/system/metrics/containers",
-   "summary": "Liệt kê container có metric (hiện hỏng)",
-   "description": "Truy vấn `monitor.system_metrics_rowstore`, bảng/schema không tồn tại trên Vitess; luôn 500 `Internal Error` (đã xác nhận). Quyền: superuser nền tảng.",
-   "status": "broken",
-   "auth": "bearer-or-internal",
-   "permissions": [
-    "superuser"
-   ],
-   "parameters": [],
-   "requestBody": null,
-   "responses": {
-    "200": "Mục tiêu: mảng tên container.",
-    "401": "Thiếu hoặc sai thông tin xác thực.",
-    "403": "Không phải superuser nền tảng.",
-    "500": "Luôn xảy ra."
    }
   },
   {
