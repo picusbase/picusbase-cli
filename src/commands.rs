@@ -773,7 +773,7 @@ pub enum DeployCommands {
         rebuild: bool,
 
         /// Phase 4 slice A: Override the runtime class advertised to the
-        /// control plane (defaults to `wasm-core-v1` for the rust adapter).
+        /// control plane (defaults to `native-v1` for the rust adapter).
         #[arg(long)]
         runtime_class: Option<String>,
 

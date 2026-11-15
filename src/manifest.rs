@@ -129,7 +129,7 @@ mod tests {
             "fn-key",
             "Friendly Name",
             "rust",
-            "wasm-core-v1",
+            "native-v1",
             "main",
             b"hello-world",
         );
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn manifest_records_artifact_size_and_checksum() {
         let payload = b"abc";
-        let m = ArtifactManifest::new("fn", "n", "rust", "wasm-core-v1", "main", payload);
+        let m = ArtifactManifest::new("fn", "n", "rust", "native-v1", "main", payload);
         assert_eq!(m.artifact_size, 3);
         // sha256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
         assert_eq!(

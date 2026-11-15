@@ -1725,7 +1725,7 @@ fn main() -> Result<()> {
                     let runtime_class = runtime_class.unwrap_or_else(|| match language {
                         "javascript" => "javascript-v1".to_string(),
                         "python" => "python-v1".to_string(),
-                        _ => "wasm-core-v1".to_string(),
+                        _ => "native-v1".to_string(),
                     });
                     let entrypoint = entrypoint.unwrap_or_else(|| "main".to_string());
                     let manifest_doc = manifest::ArtifactManifest::new(
