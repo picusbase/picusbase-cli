@@ -113,14 +113,14 @@ pub enum PlatformCommands {
         name: String,
     },
 
-    /// List organizations (uses PICUS_PERSONAL_TOKEN from config)
+    /// List organizations (uses PICUSBASE_PERSONAL_TOKEN from config)
     OrgList {
         /// Console API base URL (defaults to configured --default-url)
         #[arg(long)]
         console_url: Option<String>,
     },
 
-    /// List projects, optionally filtered by org (uses PICUS_PERSONAL_TOKEN from config)
+    /// List projects, optionally filtered by org (uses PICUSBASE_PERSONAL_TOKEN from config)
     ProjectList {
         /// Filter by organization ID
         #[arg(long)]

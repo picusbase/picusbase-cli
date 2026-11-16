@@ -2033,7 +2033,7 @@
    "method": "GET",
    "path": "/platform/app-bundles/{ref}/{code}/{checksum}",
    "summary": "Tải bundle theo checksum (không xác thực)",
-   "description": "Container `app-host` tải bundle lúc khởi động mà không có phiên người dùng. Không xác thực, nhưng địa chỉ hoá theo checksum nên chỉ bundle mà một lần deploy đã trỏ tới mới tải được (và nội dung vốn là frontend công khai).\nTruy cập qua cổng nội bộ `PICUS_STATIC_BUNDLE_URL` (console-api nội bộ), vẫn có thể gọi qua Traefik vì tiền tố `/platform` được định tuyến.",
+   "description": "Container `app-host` tải bundle lúc khởi động mà không có phiên người dùng. Không xác thực, nhưng địa chỉ hoá theo checksum nên chỉ bundle mà một lần deploy đã trỏ tới mới tải được (và nội dung vốn là frontend công khai).\nTruy cập qua cổng nội bộ `PICUSBASE_STATIC_BUNDLE_URL` (console-api nội bộ), vẫn có thể gọi qua Traefik vì tiền tố `/platform` được định tuyến.",
    "status": "implemented",
    "auth": "none",
    "permissions": [
@@ -2949,7 +2949,7 @@
    "method": "POST",
    "path": "/platform/projects/{ref}/apps/{code}/deploy",
    "summary": "Triển khai app lên domain (tạo Deployment/Service/Ingress)",
-   "description": "Chỉ superuser nền tảng. Bắt buộc app đã đăng ký (`define_app`) và đã có bundle (`upload_app_bundle`). `domain` là hostname đầy đủ (RFC 1123, chữ thường, không scheme). `bundle_checksum` tuỳ chọn: thiếu thì dùng bản upload mới nhất, có thì phải trùng bản mới nhất.\nThực hiện: đảm bảo client OAuth riêng của project (hoặc client hệ thống cho app nhân sự nội bộ) và đăng ký redirect URI `http://<domain>/callback` + `https://<domain>/callback`; chiếm lại domain từ Ingress cũ; áp dụng Deployment chạy `app-host`\n(env `PICUS_STATIC_BUNDLE_URL`, `PICUS_PINNED_PROJECT_REF`, `PICUS_PINNED_APP_CODE`, `CONSOLE_API_URL`, `AUTH_API_URL`, `REALTIME_URL`, `FUNCTIONS_URL`...), Service và Ingress qua kube-manager; cập nhật `app_configs.domain`/`deployed_at`; gỡ redirect URI của domain cũ nếu đổi domain; ghi sự kiện kiểm toán.\n`APP_PUBLIC_CONSOLE_URL` phải được cấu hình trên console-api.",
+   "description": "Chỉ superuser nền tảng. Bắt buộc app đã đăng ký (`define_app`) và đã có bundle (`upload_app_bundle`). `domain` là hostname đầy đủ (RFC 1123, chữ thường, không scheme). `bundle_checksum` tuỳ chọn: thiếu thì dùng bản upload mới nhất, có thì phải trùng bản mới nhất.\nThực hiện: đảm bảo client OAuth riêng của project (hoặc client hệ thống cho app nhân sự nội bộ) và đăng ký redirect URI `http://<domain>/callback` + `https://<domain>/callback`; chiếm lại domain từ Ingress cũ; áp dụng Deployment chạy `app-host`\n(env `PICUSBASE_STATIC_BUNDLE_URL`, `PICUSBASE_PINNED_PROJECT_REF`, `PICUSBASE_PINNED_APP_CODE`, `CONSOLE_API_URL`, `AUTH_API_URL`, `REALTIME_URL`, `FUNCTIONS_URL`...), Service và Ingress qua kube-manager; cập nhật `app_configs.domain`/`deployed_at`; gỡ redirect URI của domain cũ nếu đổi domain; ghi sự kiện kiểm toán.\n`APP_PUBLIC_CONSOLE_URL` phải được cấu hình trên console-api.",
    "status": "implemented",
    "auth": "bearer-or-internal",
    "permissions": [
@@ -6333,7 +6333,7 @@
    "method": "GET",
    "path": "/platform/v1/projects/{ref}/api-keys",
    "summary": "Lấy khoá API anon và service_role của project",
-   "description": "Ký hai JWT HS256 bằng `auth_user_pools.jwt_secret` của project (tự sinh nếu chưa có): `anon` và `service_role`, claims `ref`, `role`, `iat`, hạn 10 năm. Chỉ owner/admin (hoặc superuser).\nAuth-service và console-api chỉ chấp nhận HS256 khi bật `PICUS_AUTH_ALLOW_LEGACY_HS256_VERIFY` (mặc định tắt), nên cấu hình mặc định các khoá này không dùng được để gọi API (Cần xác minh các nơi tiêu thụ khác).",
+   "description": "Ký hai JWT HS256 bằng `auth_user_pools.jwt_secret` của project (tự sinh nếu chưa có): `anon` và `service_role`, claims `ref`, `role`, `iat`, hạn 10 năm. Chỉ owner/admin (hoặc superuser).\nAuth-service và console-api chỉ chấp nhận HS256 khi bật `PICUSBASE_AUTH_ALLOW_LEGACY_HS256_VERIFY` (mặc định tắt), nên cấu hình mặc định các khoá này không dùng được để gọi API (Cần xác minh các nơi tiêu thụ khác).",
    "status": "implemented",
    "auth": "bearer",
    "permissions": [

@@ -41,7 +41,7 @@ picusbase function list
 
 Có PAT, CLI đổi lấy access token và đi qua console-api. Không có PAT, `--default-url` là Compute Control Plane (`http://localhost:4080/api`, cần port-forward). Config file được ghi quyền 0600.
 
-Thứ tự ưu tiên resolve: flag CLI → biến môi trường `PICUS_*` → config file → default.
+Thứ tự ưu tiên resolve: flag CLI → biến môi trường `PICUSBASE_*` → config file → default.
 
 ## Workflow phổ biến
 
@@ -61,7 +61,7 @@ Ba lane hỗ trợ:
 
 ### Function Rust (native-v1)
 
-Cần `picus.toml`, `Cargo.toml` và `src/bin/native_worker.rs`. Build chạy trong Docker (Linux) nên cần Docker đang chạy. Dependency từ crates.io không cần gì thêm. Dependency kiểu `path` (kể cả bắc cầu) và workspace cha được mount vào container, nên phải cùng nằm dưới một thư mục (ví dụ `sdk/` cạnh `functions/` của bundle). Kết quả build nằm ở `functions/target/`. Đặt `PICUS_NATIVE_BUILD_PLATFORM` (vd `linux/amd64`) khi nền tảng đích khác kiến trúc máy build.
+Cần `picus.toml`, `Cargo.toml` và `src/bin/native_worker.rs`. Build chạy trong Docker (Linux) nên cần Docker đang chạy. Dependency từ crates.io không cần gì thêm. Dependency kiểu `path` (kể cả bắc cầu) và workspace cha được mount vào container, nên phải cùng nằm dưới một thư mục (ví dụ `sdk/` cạnh `functions/` của bundle). Kết quả build nằm ở `functions/target/`. Đặt `PICUSBASE_NATIVE_BUILD_PLATFORM` (vd `linux/amd64`) khi nền tảng đích khác kiến trúc máy build.
 
 ### 2. Build
 
@@ -152,13 +152,13 @@ picusbase schedule delete --id <schedule-id>
 
 | Biến | Mô tả |
 |---|---|
-| `PICUS_URL` | Base URL của API |
-| `PICUS_PROJECT_REF` | Project ref mặc định |
-| `PICUS_EXECUTOR_URL` | URL của HTTP worker |
-| `PICUS_PERSONAL_TOKEN` | Personal access token |
-| `PICUS_AUTH_TOKEN` | Bearer token cho `function run --executor-url` |
-| `PICUS_USER_ID` | User ID (dev bypass) |
-| `PICUS_PROFILE` | Profile được chọn |
+| `PICUSBASE_URL` | Base URL của API |
+| `PICUSBASE_PROJECT_REF` | Project ref mặc định |
+| `PICUSBASE_EXECUTOR_URL` | URL của HTTP worker |
+| `PICUSBASE_PERSONAL_TOKEN` | Personal access token |
+| `PICUSBASE_AUTH_TOKEN` | Bearer token cho `function run --executor-url` |
+| `PICUSBASE_USER_ID` | User ID (dev bypass) |
+| `PICUSBASE_PROFILE` | Profile được chọn |
 
 ## Examples
 

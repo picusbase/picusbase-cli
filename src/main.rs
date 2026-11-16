@@ -35,7 +35,7 @@ fn normalize_optional_string(value: Option<String>) -> Option<String> {
 
 fn resolve_explicit_cli_profile(cli_profile: Option<String>) -> Option<String> {
     normalize_optional_string(cli_profile)
-        .or_else(|| normalize_optional_string(std::env::var("PICUS_PROFILE").ok()))
+        .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_PROFILE").ok()))
 }
 
 fn resolve_cli_profile(cli_profile: Option<String>, defaults: &CliDefaults) -> Option<String> {
@@ -75,7 +75,7 @@ fn resolve_cli_url(
     selected_profile: Option<&CliProfile>,
 ) -> String {
     normalize_optional_string(cli_url)
-        .or_else(|| normalize_optional_string(std::env::var("PICUS_URL").ok()))
+        .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_URL").ok()))
         .or_else(|| {
             selected_profile.and_then(|profile| normalize_optional_string(profile.url.clone()))
         })
@@ -89,7 +89,7 @@ fn resolve_cli_project_ref(
     selected_profile: Option<&CliProfile>,
 ) -> Option<String> {
     normalize_optional_string(cli_project_ref)
-        .or_else(|| normalize_optional_string(std::env::var("PICUS_PROJECT_REF").ok()))
+        .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_PROJECT_REF").ok()))
         .or_else(|| {
             selected_profile
                 .and_then(|profile| normalize_optional_string(profile.project_ref.clone()))
@@ -103,7 +103,7 @@ fn resolve_cli_executor_url(
     selected_profile: Option<&CliProfile>,
 ) -> Option<String> {
     normalize_optional_string(cli_executor_url)
-        .or_else(|| normalize_optional_string(std::env::var("PICUS_EXECUTOR_URL").ok()))
+        .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_EXECUTOR_URL").ok()))
         .or_else(|| {
             selected_profile
                 .and_then(|profile| normalize_optional_string(profile.executor_url.clone()))
@@ -115,7 +115,7 @@ fn resolve_cli_personal_token(
     defaults: &CliDefaults,
     selected_profile: Option<&CliProfile>,
 ) -> Option<String> {
-    normalize_optional_string(std::env::var("PICUS_PERSONAL_TOKEN").ok())
+    normalize_optional_string(std::env::var("PICUSBASE_PERSONAL_TOKEN").ok())
         .or_else(|| {
             selected_profile
                 .and_then(|profile| normalize_optional_string(profile.personal_token.clone()))
@@ -143,7 +143,7 @@ fn token_state(token: &Option<String>) -> &'static str {
 
 fn resolve_cli_auth_token(cli_auth_token: Option<String>) -> Option<String> {
     normalize_optional_string(cli_auth_token)
-        .or_else(|| normalize_optional_string(std::env::var("PICUS_AUTH_TOKEN").ok()))
+        .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_AUTH_TOKEN").ok()))
 }
 
 fn find_functions_root(path: &Path) -> Option<&Path> {
@@ -1224,7 +1224,20 @@ fn run_upgrade() -> Result<()> {
     Ok(())
 }
 
+/// `PICUS_X` was renamed `PICUSBASE_X`; a variable set under the old name still works when the new one is unset.
+fn adopt_legacy_env() {
+    for (name, value) in std::env::vars() {
+        if let Some(rest) = name.strip_prefix("PICUS_") {
+            let renamed = format!("PICUSBASE_{rest}");
+            if std::env::var_os(&renamed).is_none() {
+                std::env::set_var(renamed, value);
+            }
+        }
+    }
+}
+
 fn main() -> Result<()> {
+    adopt_legacy_env();
     let cli = Cli::parse();
     let cli_defaults = CliDefaults::load()?;
     let explicit_profile_name = resolve_explicit_cli_profile(cli.profile.clone());
@@ -1575,13 +1588,13 @@ fn main() -> Result<()> {
         },
         Commands::Data(args) => match args.command {
             DataCommands::Restore { dir } => {
-                let project_ref = resolved_project_ref.as_deref().context("project_ref is required: --project-ref or PICUS_PROJECT_REF")?;
+                let project_ref = resolved_project_ref.as_deref().context("project_ref is required: --project-ref or PICUSBASE_PROJECT_REF")?;
                 schema_deploy::restore_data(&client, &dir, project_ref)
             }
         },
         Commands::Deploy(args) => match args.command {
             DeployCommands::Schema { path, skip_functions, no_publish, bound_user_id, dry_run, keep_going } => {
-                let project_ref = resolved_project_ref.as_deref().context("project_ref is required: --project-ref or PICUS_PROJECT_REF")?;
+                let project_ref = resolved_project_ref.as_deref().context("project_ref is required: --project-ref or PICUSBASE_PROJECT_REF")?;
                 schema_deploy::run(
                     &client,
                     &path,
@@ -1591,9 +1604,9 @@ fn main() -> Result<()> {
                 )
             }
             DeployCommands::App { path, domain, skip_build } => {
-                // Explicit --project-ref / PICUS_PROJECT_REF beats picus.app.toml, which beats the profile.
+                // Explicit --project-ref / PICUSBASE_PROJECT_REF beats picus.app.toml, which beats the profile.
                 let explicit_project_ref = normalize_optional_string(cli.project_ref.clone())
-                    .or_else(|| normalize_optional_string(std::env::var("PICUS_PROJECT_REF").ok()));
+                    .or_else(|| normalize_optional_string(std::env::var("PICUSBASE_PROJECT_REF").ok()));
                 web_app::deploy_app(
                     &client,
                     explicit_project_ref.as_deref(),

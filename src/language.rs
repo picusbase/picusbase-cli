@@ -306,12 +306,12 @@ impl LanguageAdapter for RustAdapter {
         // VM failed guest cold-start with "Exec format error" — confirmed by
         // inspecting the packaged artifact's ELF header directly
         // (`ARM aarch64` inside a bundle meant for an x86_64 node).
-        // `PICUS_NATIVE_BUILD_PLATFORM` overrides the default (host-arch)
+        // `PICUSBASE_NATIVE_BUILD_PLATFORM` overrides the default (host-arch)
         // resolution when the deploy target's architecture is known and
         // differs from the machine running this build — set by
         // `picus-erp/deploy.sh` from `deploy/product.env`. Left unset,
         // behavior is unchanged from before this fix.
-        if let Ok(platform) = std::env::var("PICUS_NATIVE_BUILD_PLATFORM") {
+        if let Ok(platform) = std::env::var("PICUSBASE_NATIVE_BUILD_PLATFORM") {
             if !platform.trim().is_empty() {
                 cmd.args(["--platform", platform.trim()]);
             }
@@ -336,12 +336,12 @@ impl LanguageAdapter for RustAdapter {
         // function's own default already matches local kind's dev environment. Add a name here
         // whenever a function needs one more of these; three real bugs from exactly this gap so
         // far: `provision_tenant` shipped `"local-dev-internal-service-token"` baked in (401 the
-        // moment PICUS_FETCH_ALLOWLIST was fixed, 2026-09-25), then `"...picusbase.localhost"`
+        // moment PICUSBASE_FETCH_ALLOWLIST was fixed, 2026-09-25), then `"...picusbase.localhost"`
         // baked into every new tenant's domain (2026-09-25), then a local-kind-only
         // `SOURCE_PROJECT_REF` default that silently registered ZERO business functions for every
         // tenant provisioned on product (2026-09-26 — every prior tenant had only the built-in
         // `entities-data` function, nothing else).
-        for var in ["PICUS_INTERNAL_SERVICE_TOKEN", "ERP_TENANT_DOMAIN_SUFFIX", "ERP_SOURCE_PROJECT_REF"] {
+        for var in ["PICUSBASE_INTERNAL_SERVICE_TOKEN", "ERP_TENANT_DOMAIN_SUFFIX", "ERP_SOURCE_PROJECT_REF"] {
             if let Ok(value) = std::env::var(var) {
                 if !value.trim().is_empty() {
                     cmd.args(["-e", &format!("{var}={}", value.trim())]);
