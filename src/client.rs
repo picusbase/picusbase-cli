@@ -222,7 +222,7 @@ impl PicusClient {
     pub fn bearer_token(&self) -> Result<String> {
         let pat = self.personal_token.as_deref().ok_or_else(|| {
             anyhow::anyhow!(
-                "personal_token is required: `picusbase config set --personal-token <pbpat_...>` or PICUS_PERSONAL_TOKEN"
+                "personal_token is required: `picusbase config set --personal-token <pbpat_...>` or PICUSBASE_PERSONAL_TOKEN"
             )
         })?;
         self.console_token(pat)
@@ -240,7 +240,7 @@ impl PicusClient {
         })?;
         let project_ref = self.project_ref.as_deref().ok_or_else(|| {
             anyhow::anyhow!(
-                "project_ref is required: --project-ref or PICUS_PROJECT_REF"
+                "project_ref is required: --project-ref or PICUSBASE_PROJECT_REF"
             )
         })?;
         Ok(format!(
@@ -302,7 +302,7 @@ impl PicusClient {
     ) -> Result<(u16, String)> {
         if self.personal_token.is_none() {
             anyhow::bail!(
-                "personal_token is required: `picusbase config set --personal-token <pbpat_...>` or PICUS_PERSONAL_TOKEN"
+                "personal_token is required: `picusbase config set --personal-token <pbpat_...>` or PICUSBASE_PERSONAL_TOKEN"
             );
         }
         let method = reqwest::Method::from_bytes(method.as_bytes())?;
@@ -440,7 +440,7 @@ impl PicusClient {
         match authority.strip_prefix("console.") {
             Some(host) => Ok(format!("{scheme}://functions.{host}")),
             None => anyhow::bail!(
-                "Cannot derive the functions URL from '{}': set --executor-url, PICUS_EXECUTOR_URL or `picusbase config set --default-executor-url https://functions.<domain>`",
+                "Cannot derive the functions URL from '{}': set --executor-url, PICUSBASE_EXECUTOR_URL or `picusbase config set --default-executor-url https://functions.<domain>`",
                 self.base_url
             ),
         }
@@ -473,7 +473,7 @@ impl PicusClient {
     pub fn run_function(&self, id: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         let project_ref = self.project_ref.as_deref().ok_or_else(|| {
             anyhow::anyhow!(
-                "project_ref is required: --project-ref or PICUS_PROJECT_REF"
+                "project_ref is required: --project-ref or PICUSBASE_PROJECT_REF"
             )
         })?;
         let url = format!("{}/functions/{}/execute", self.functions_url()?, id);

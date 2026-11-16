@@ -84,7 +84,7 @@ pub fn init_app(
         bail!("App name must not contain < > {{ }} \" or \\");
     }
     let project_ref = project_ref.context(
-        "project_ref is required: --project-ref or PICUS_PROJECT_REF",
+        "project_ref is required: --project-ref or PICUSBASE_PROJECT_REF",
     )?;
     let kebab = code.replace('_', "-");
     let console_url = client.base_url().trim_end_matches('/');
@@ -184,7 +184,7 @@ fn wait_until_serving(url: &str, expected_index: &str) -> bool {
 }
 
 fn require_project_ref(project_ref: Option<&str>) -> Result<&str> {
-    project_ref.context("project_ref is required: --project-ref or PICUS_PROJECT_REF")
+    project_ref.context("project_ref is required: --project-ref or PICUSBASE_PROJECT_REF")
 }
 
 /// Waits until `url` serves this app's container (`/runtime-config.json` names the app).

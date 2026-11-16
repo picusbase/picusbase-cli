@@ -106,7 +106,7 @@ pub fn resolve(method: &str, raw_path: &str, project_ref: Option<&str>, query: &
     let (path_part, inline_query) = raw_path.split_once('?').unwrap_or((raw_path, ""));
     let mut path = path_part.trim_end_matches('/').to_string();
     if path.contains("{ref}") {
-        let project_ref = project_ref.ok_or_else(|| anyhow::anyhow!("project_ref is required for {{ref}}: --project-ref or PICUS_PROJECT_REF"))?;
+        let project_ref = project_ref.ok_or_else(|| anyhow::anyhow!("project_ref is required for {{ref}}: --project-ref or PICUSBASE_PROJECT_REF"))?;
         path = path.replace("{ref}", project_ref);
     }
     let op = operations()?

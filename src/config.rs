@@ -36,10 +36,10 @@ impl CliDefaults {
     }
 
     pub fn path() -> Result<PathBuf> {
-        if let Ok(path) = env::var("PICUS_CONFIG_PATH") {
+        if let Ok(path) = env::var("PICUSBASE_CONFIG_PATH") {
             let trimmed = path.trim();
             if trimmed.is_empty() {
-                anyhow::bail!("PICUS_CONFIG_PATH must not be empty");
+                anyhow::bail!("PICUSBASE_CONFIG_PATH must not be empty");
             }
 
             return Ok(PathBuf::from(trimmed));
@@ -53,7 +53,7 @@ impl CliDefaults {
         }
 
         let home = env::var("HOME")
-            .context("HOME is not set; set PICUS_CONFIG_PATH to choose a config file")?;
+            .context("HOME is not set; set PICUSBASE_CONFIG_PATH to choose a config file")?;
 
         Ok(PathBuf::from(home)
             .join(".config")

@@ -313,7 +313,7 @@ pub fn copy_internal_token_secret(app_config: &AppConfig, env: &EnvConfig) -> Re
 
     if !output.status.success() || output.stdout.is_empty() {
         eprintln!(
-            "Warning: could not get {} from {}; PICUS_AUTH_INTERNAL_SERVICE_TOKEN will not be injected.",
+            "Warning: could not get {} from {}; PICUSBASE_AUTH_INTERNAL_SERVICE_TOKEN will not be injected.",
             source_secret, env.picusbase_namespace
         );
         return Ok(());
@@ -323,7 +323,7 @@ pub fn copy_internal_token_secret(app_config: &AppConfig, env: &EnvConfig) -> Re
     let secret_name = format!("picus-app-{}-{}", app_config.app.id, if env.is_local { "local" } else { "prod" });
 
     println!(
-        "Copying PICUS_AUTH_INTERNAL_SERVICE_TOKEN -> {}/{}...",
+        "Copying PICUSBASE_AUTH_INTERNAL_SERVICE_TOKEN -> {}/{}...",
         env.namespace, secret_name
     );
 
@@ -335,7 +335,7 @@ metadata:
   namespace: {ns}
 type: Opaque
 data:
-  PICUS_AUTH_INTERNAL_SERVICE_TOKEN: {data}
+  PICUSBASE_AUTH_INTERNAL_SERVICE_TOKEN: {data}
 "#,
         name = secret_name,
         ns = env.namespace,
