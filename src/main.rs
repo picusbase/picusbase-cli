@@ -378,27 +378,6 @@ fn relative_dependency_path(from_dir: &Path, target: &Path) -> Result<String> {
     Ok(normalize_toml_path(relative))
 }
 
-fn rust_scaffold_dependency_paths(
-    repo_root: &Path,
-    function_dir: &Path,
-) -> Result<(String, String)> {
-    let function_kit_path = relative_dependency_path(
-        function_dir,
-        &repo_root
-            .join("picus-erp")
-            .join("packages")
-            .join("function-kit"),
-    )?;
-    let wasm_sdk_path = relative_dependency_path(
-        function_dir,
-        &platform_repo_dir(repo_root)
-            .join("packages")
-            .join("wasm-sdk"),
-    )?;
-
-    Ok((function_kit_path, wasm_sdk_path))
-}
-
 fn read_project_ref_from_picus_toml(path: &Path) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
     let value: toml::Value = toml::from_str(&content).ok()?;
@@ -487,42 +466,6 @@ fn prompt_with_default(label: &str, default: &str) -> Result<String> {
     }
 }
 
-fn optional_function_dependencies(
-    repo_root: Option<&Path>,
-    function_dir: &Path,
-    domain: &str,
-) -> Result<String> {
-    let mut lines = Vec::new();
-
-    if let Some(root) = repo_root {
-        let packages_dir = root.join("picus-erp").join("packages");
-        if packages_dir.join("dashboard-api-contracts").is_dir() {
-            lines.push(format!(
-                "dashboard-api-contracts = {{ path = \"{}\" }}",
-                relative_dependency_path(
-                    function_dir,
-                    &packages_dir.join("dashboard-api-contracts")
-                )?
-            ));
-        }
-
-        let support_package = format!("{}-function-support", domain);
-        if packages_dir.join(&support_package).is_dir() {
-            lines.push(format!(
-                "{} = {{ path = \"{}\" }}",
-                support_package,
-                relative_dependency_path(function_dir, &packages_dir.join(&support_package))?
-            ));
-        }
-    }
-
-    if lines.is_empty() {
-        Ok(String::new())
-    } else {
-        Ok(lines.join("\n"))
-    }
-}
-
 fn insert_toml_array_entry(content: &mut String, array_name: &str, entry: &str) -> Result<bool> {
     let quoted_entry = format!("\"{}\"", entry);
     if content.contains(&quoted_entry) {
@@ -540,23 +483,6 @@ fn insert_toml_array_entry(content: &mut String, array_name: &str, entry: &str) 
 
     content.insert_str(insert_at, &format!("    {},\n", quoted_entry));
     Ok(true)
-}
-
-fn add_functions_workspace_domain(functions_root: &Path, domain: &str) -> Result<bool> {
-    let cargo_toml_path = functions_root.join("Cargo.toml");
-    let mut content = std::fs::read_to_string(&cargo_toml_path)
-        .with_context(|| format!("Failed to read {}", cargo_toml_path.display()))?;
-
-    let mut modified = false;
-    modified |= insert_toml_array_entry(&mut content, "members", &format!("{}/*", domain))?;
-    modified |= insert_toml_array_entry(&mut content, "exclude", &format!("{}/target", domain))?;
-
-    if modified {
-        std::fs::write(&cargo_toml_path, content)
-            .with_context(|| format!("Failed to update {}", cargo_toml_path.display()))?;
-    }
-
-    Ok(modified)
 }
 
 /// Insert a single explicit path into the functions workspace
@@ -2184,41 +2110,45 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
 
-                std::fs::create_dir_all(function_dir.join("src"))?;
+                std::fs::create_dir_all(function_dir.join("src").join("bin"))?;
                 println!("📂 Created directory: {}", function_dir.display());
 
-                let rust_repo_root = repo_root.ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "Rust scaffold requires running inside the Picus monorepo so dependency paths can be generated."
-                    )
-                })?;
-                let (function_kit_path, wasm_sdk_path) =
-                    rust_scaffold_dependency_paths(&rust_repo_root, &function_dir)?;
-                let optional_dependencies =
-                    optional_function_dependencies(Some(&rust_repo_root), &function_dir, &domain)?;
-
+                // native-v1: an independent crate on `picusbase-function-sdk` from crates.io, so no monorepo is needed.
                 let picus_toml_content = include_str!("templates/picus.toml")
                     .replace("{{FUNCTION_ID}}", &function_id)
                     .replace("{{FUNCTION_NAME}}", &function_name)
                     .replace("{{PROJECT_REF}}", &project_ref)
-                    .replace("{{FUNCTION_DOMAIN}}", &domain);
+                    .replace(
+                        "domain = \"{{FUNCTION_DOMAIN}}\"",
+                        &format!("domain = \"{domain}\"\nlanguage = \"rust\""),
+                    );
                 std::fs::write(function_dir.join("picus.toml"), picus_toml_content)?;
                 println!("✅ Created picus.toml");
 
                 let cargo_toml_content = include_str!("templates/rust/Cargo.toml")
-                    .replace("{{FUNCTION_ID}}", &function_id)
-                    .replace("{{FUNCTION_KIT_PATH}}", &function_kit_path)
-                    .replace("{{WASM_SDK_PATH}}", &wasm_sdk_path)
-                    .replace("{{OPTIONAL_DEPENDENCIES}}", &optional_dependencies);
+                    .replace("{{FUNCTION_ID}}", &function_id);
                 let cargo_toml_path = function_dir.join("Cargo.toml");
                 std::fs::write(&cargo_toml_path, cargo_toml_content)?;
-                println!("✅ Created Cargo.toml");
+                if ensure_local_workspace_fence(&cargo_toml_path)? {
+                    println!("✅ Created Cargo.toml (standalone crate, empty [workspace])");
+                } else {
+                    println!("✅ Created Cargo.toml");
+                }
 
+                let crate_ident = function_id.replace('-', "_");
                 let lib_rs_content = include_str!("templates/rust/lib.rs")
-                    .replace("{{STRUCT_NAME}}", &schema_prefix)
-                    .replace("{{FUNCTION_ID}}", &function_id);
+                    .replace("{{STRUCT_NAME}}", &schema_prefix);
                 std::fs::write(function_dir.join("src").join("lib.rs"), lib_rs_content)?;
                 println!("✅ Created src/lib.rs");
+
+                let worker_rs_content = include_str!("templates/rust/native_worker.rs")
+                    .replace("{{CRATE_IDENT}}", &crate_ident)
+                    .replace("{{STRUCT_NAME}}", &schema_prefix);
+                std::fs::write(
+                    function_dir.join("src").join("bin").join("native_worker.rs"),
+                    worker_rs_content,
+                )?;
+                println!("✅ Created src/bin/native_worker.rs");
 
                 let openapi_content = include_str!("templates/openapi.yaml")
                     .replace("{{FUNCTION_ID}}", &function_id)
@@ -2228,50 +2158,16 @@ fn main() -> Result<()> {
                 std::fs::write(function_dir.join("openapi.yaml"), openapi_content)?;
                 println!("✅ Created openapi.yaml");
 
-                if let Some(root) = functions_root.as_ref() {
-                    let bootstrap = ensure_functions_workspace_bootstrap(root, &rust_repo_root)?;
-                    report_functions_workspace_bootstrap(root, &bootstrap);
-
-                    if !no_workspace_member {
-                        if add_functions_workspace_domain(root, &domain)? {
-                            println!("✅ Updated functions workspace for domain: {}", domain);
-                        } else {
-                            println!("ℹ️  Functions workspace already covers domain: {}", domain);
-                        }
-                    } else {
-                        let exclude_entry = format!("{}/{}", domain, function_id);
-                        if add_functions_workspace_exclude_entry(root, &exclude_entry)? {
-                            println!(
-                                "✅ Added {} to functions workspace exclude list",
-                                exclude_entry
-                            );
-                        } else {
-                            println!("ℹ️  Functions workspace already excludes {}", exclude_entry);
-                        }
-                    }
-                } else {
-                    if ensure_local_workspace_fence(&cargo_toml_path)? {
-                        println!("✅ Added local [workspace] fence for standalone Rust function");
-                    }
-                    println!(
-                        "ℹ️  Using standalone Rust workspace outside any managed functions root."
-                    );
-                }
-
                 println!(
                     "\n🎉 Function initialized successfully at {}",
                     function_dir.display()
                 );
                 println!("Next steps:");
-                println!("  1. Implement actions in src/lib.rs");
+                println!("  1. Implement the handler in src/lib.rs");
                 println!("  2. Refine request/response schemas in openapi.yaml");
-                println!("  3. Add shared DTOs or support packages if needed");
+                println!("  3. Run: cd {} && cargo check", function_dir.display());
                 println!(
-                    "  4. Run: cd {} && cargo check --target wasm32-unknown-unknown",
-                    function_dir.display()
-                );
-                println!(
-                    "  5. Run: cd {} && picusbase deploy functions --rebuild",
+                    "  4. Run: cd {} && picusbase deploy functions --rebuild",
                     function_dir.display()
                 );
 

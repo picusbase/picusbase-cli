@@ -4,11 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["rlib"]
 
 [dependencies]
-function-kit = { path = "{{FUNCTION_KIT_PATH}}" }
-picus-wasm-sdk = { path = "{{WASM_SDK_PATH}}" }
-serde = { version = "1.0", features = ["derive"] }
+picusbase-function-sdk = "0.1"
 serde_json = "1.0"
-{{OPTIONAL_DEPENDENCIES}}
