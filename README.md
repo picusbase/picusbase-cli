@@ -55,13 +55,13 @@ Ba lane hỗ trợ:
 
 | Flag | Lane | File chính |
 |---|---|---|
-| (bỏ trống) hoặc `--language rust` | Rust/Wasm | `src/lib.rs` |
+| (bỏ trống) hoặc `--language rust` | Rust (native-v1) | `src/lib.rs`, `src/bin/native_worker.rs` |
 | `--language javascript` | JavaScript | `src/index.mjs` |
 | `--language python` | Python | `src/handler.py` |
 
 ### Function Rust (native-v1)
 
-Cần `picus.toml`, `Cargo.toml` và `src/bin/native_worker.rs`. Build chạy trong Docker (Linux) nên cần Docker đang chạy. Dependency từ crates.io không cần gì thêm. Dependency kiểu `path` (kể cả bắc cầu) và workspace cha được mount vào container, nên phải cùng nằm dưới một thư mục (ví dụ `sdk/` cạnh `functions/` của bundle). Kết quả build nằm ở `functions/target/`. Đặt `PICUSBASE_NATIVE_BUILD_PLATFORM` (vd `linux/amd64`) khi nền tảng đích khác kiến trúc máy build.
+`init` sinh một crate độc lập (có `[workspace]` rỗng) dùng `picusbase-function-sdk = "0.1"` từ crates.io, nên chạy được ở bất kỳ thư mục nào, không cần monorepo. Cần `picus.toml`, `Cargo.toml` và `src/bin/native_worker.rs`. Build chạy trong Docker (Linux) nên cần Docker đang chạy. Dependency từ crates.io không cần gì thêm. Dependency kiểu `path` (kể cả bắc cầu) và workspace cha được mount vào container, nên phải cùng nằm dưới một thư mục (ví dụ `sdk/` cạnh `functions/` của bundle). Kết quả build nằm ở `functions/target/`. Đặt `PICUSBASE_NATIVE_BUILD_PLATFORM` (vd `linux/amd64`) khi nền tảng đích khác kiến trúc máy build.
 
 ### 2. Build
 
