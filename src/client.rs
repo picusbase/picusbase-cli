@@ -187,7 +187,7 @@ pub struct PicusClient {
     executor_url: Option<String>,
     auth_token: Option<String>,
     personal_token: Option<String>,
-    console_token: std::sync::OnceLock<String>,
+    console_token: std::sync::Mutex<Option<(String, std::time::Instant)>>,
 }
 
 impl PicusClient {
@@ -204,7 +204,7 @@ impl PicusClient {
             executor_url,
             auth_token,
             personal_token: None,
-            console_token: std::sync::OnceLock::new(),
+            console_token: std::sync::Mutex::new(None),
         }
     }
 
@@ -249,14 +249,19 @@ impl PicusClient {
         ))
     }
 
+    /// The exchanged access token, cached until a minute before it expires (about 15 minutes).
     fn console_token(&self, personal_token: &str) -> Result<String> {
-        if let Some(token) = self.console_token.get() {
-            return Ok(token.clone());
+        let mut cached = self.console_token.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((token, valid_until)) = cached.as_ref() {
+            if std::time::Instant::now() < *valid_until {
+                return Ok(token.clone());
+            }
         }
 
         #[derive(Deserialize)]
         struct TokenResponse {
             access_token: String,
+            expires_in: Option<u64>,
         }
 
         let res = self
@@ -274,8 +279,13 @@ impl PicusClient {
                 res.status()
             );
         }
-        let token = res.json::<TokenResponse>()?.access_token;
-        Ok(self.console_token.get_or_init(|| token).clone())
+        let body = res.json::<TokenResponse>()?;
+        let lifetime = body.expires_in.unwrap_or(300).saturating_sub(60).max(10);
+        *cached = Some((
+            body.access_token.clone(),
+            std::time::Instant::now() + std::time::Duration::from_secs(lifetime),
+        ));
+        Ok(body.access_token)
     }
 
     fn request_builder(

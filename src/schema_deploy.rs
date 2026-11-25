@@ -48,16 +48,20 @@ struct Api<'a> {
     http: Client,
     base: String,
     project_ref: &'a str,
-    token: String,
+    client: &'a PicusClient,
 }
 
 impl Api<'_> {
+    fn token(&self) -> Result<String> {
+        self.client.bearer_token()
+    }
+
     fn url(&self, path: &str) -> String {
         format!("{}/platform/projects/{}{path}", self.base, self.project_ref)
     }
 
     fn send(&self, request: reqwest::blocking::RequestBuilder, what: &str) -> Result<Value> {
-        let res = request.bearer_auth(&self.token).send().with_context(|| format!("{what}: request failed"))?;
+        let res = request.bearer_auth(self.token()?).send().with_context(|| format!("{what}: request failed"))?;
         let status = res.status();
         let body = res.text().unwrap_or_default();
         if !status.is_success() {
@@ -170,7 +174,7 @@ pub fn run(
     if !bundle_dir.is_dir() {
         bail!("Bundle directory not found: {}", bundle_dir.display());
     }
-    let api = Api { http: Client::new(), base: client.base_url().trim_end_matches('/').to_string(), project_ref, token: client.bearer_token()? };
+    let api = Api { http: Client::new(), base: client.base_url().trim_end_matches('/').to_string(), project_ref, client };
 
     let doctypes_dir = bundle_dir.join("doctypes");
     let mut entities = scan_yaml_dirs(&doctypes_dir)?;
@@ -286,7 +290,7 @@ pub fn run(
         failed_functions.extend(deploy_functions(&scan, &deployable, client, project_ref, personal_token, options.keep_going)?);
     }
     restore_automations(&api, &bundle_dir.join("automations"))?;
-    let bound_user = options.bound_user_id.or_else(|| jwt_subject(&api.token));
+    let bound_user = options.bound_user_id.or_else(|| api.token().ok().and_then(|t| jwt_subject(&t)));
     restore_ai_agents(&api, &bundle_dir.join("ai_agent").join("agents"), bound_user.as_deref())?;
 
     if !failed_functions.is_empty() {
@@ -466,7 +470,7 @@ pub fn restore_data(client: &PicusClient, dir: &Path, project_ref: &str) -> Resu
     if files.is_empty() {
         bail!("No .sql files in {}", dir.display());
     }
-    let api = Api { http: Client::new(), base: client.base_url().trim_end_matches('/').to_string(), project_ref, token: client.bearer_token()? };
+    let api = Api { http: Client::new(), base: client.base_url().trim_end_matches('/').to_string(), project_ref, client };
     println!("Restoring {} file(s) into {project_ref}...", files.len());
     let result = api.post("/data/restore", &json!({ "files": files }), "restore data")?;
     println!("✅ {} statements", result["statements"].as_u64().unwrap_or(0));
@@ -610,7 +614,7 @@ fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
             let res = api
                 .http
                 .patch(api.url(&format!("/entities/workflow_definition/records/{id}")))
-                .bearer_auth(&api.token)
+                .bearer_auth(api.token()?)
                 .json(&body)
                 .send()?;
             if res.status().is_success() {
