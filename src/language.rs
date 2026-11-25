@@ -340,8 +340,14 @@ impl LanguageAdapter for RustAdapter {
         // baked into every new tenant's domain (2026-09-25), then a local-kind-only
         // `SOURCE_PROJECT_REF` default that silently registered ZERO business functions for every
         // tenant provisioned on product (2026-09-26 — every prior tenant had only the built-in
-        // `entities-data` function, nothing else).
-        for var in ["PICUSBASE_INTERNAL_SERVICE_TOKEN", "ERP_TENANT_DOMAIN_SUFFIX", "ERP_SOURCE_PROJECT_REF"] {
+        // `entities-data` function, nothing else), then a local-dev `ERP_SYSTEM_USER_ID` that
+        // product could not override (2026-11-25).
+        for var in [
+            "PICUSBASE_INTERNAL_SERVICE_TOKEN",
+            "ERP_TENANT_DOMAIN_SUFFIX",
+            "ERP_SOURCE_PROJECT_REF",
+            "ERP_SYSTEM_USER_ID",
+        ] {
             if let Ok(value) = std::env::var(var) {
                 if !value.trim().is_empty() {
                     cmd.args(["-e", &format!("{var}={}", value.trim())]);
