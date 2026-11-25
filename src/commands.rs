@@ -65,7 +65,7 @@ pub enum Commands {
 
     /// 3-step deploy flow: prepare Kubernetes, bootstrap kube-manager, then
     /// have kube-manager install the full picusbase stack via Helm — same
-    /// commands for local dev and product (see PLAN-cluster-manager-deploy.md)
+    /// commands for local dev and product (see `operations/product-deploy` in picusbase-docs)
     Cluster(ClusterArgs),
 
     /// Deploy and manage consumer apps on PicusBase infrastructure
@@ -378,7 +378,7 @@ pub enum ClusterCommands {
     /// Step 1 (local dev only): create the kind cluster + Traefik +
     /// metrics-server — nothing app-level. Product's Step 1 is the separate
     /// SSH/K3s bootstrap runbook (VM-level, not something this CLI can do
-    /// from a laptop) — see docs-picusbase/05-operations/product/01-bootstrap/.
+    /// from a laptop) — see `operations/product-deploy` in picusbase-docs.
     PrepareLocal {
         /// Kind cluster name (default: picusbase-local)
         #[arg(long)]
@@ -397,7 +397,7 @@ pub enum ClusterCommands {
     /// `helm install/upgrade` the standalone infra chart
     /// (infrastructure/helm/kube-manager/ — a separate chart directory, not a
     /// values overlay on the app chart) on an already-prepared cluster (kind
-    /// for dev, k3s for product) — see PLAN-cluster-manager-deploy.md Phase M.
+    /// for dev, k3s for product).
     /// This release is infrastructure, not an app instance: it stays up for
     /// the lifetime of the cluster and is never named the same as (or
     /// touched by installing/uninstalling) any picusbase app instance created
@@ -666,7 +666,7 @@ pub enum ConfigCommands {
         #[arg(long)]
         default_project_ref: Option<String>,
 
-        /// Personal access token (pbpat_...) from Console → System Admin → Access Tokens.
+        /// Personal access token (pbpat_...) from Console → Access Tokens.
         /// When set, --default-url must be the Console URL (e.g. http://console.picusbase.localhost).
         #[arg(long)]
         personal_token: Option<String>,

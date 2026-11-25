@@ -2392,7 +2392,7 @@ fn main() -> Result<()> {
             let cwd = std::env::current_dir()?;
             let platform_dir = find_platform_dir(&cwd)?;
             let scripts_dir = platform_dir.join("infrastructure").join("scripts");
-            // Standalone infra chart — see PLAN-cluster-manager-deploy.md Phase M. Its own
+            // Standalone infra chart. Its own
             // values.yaml already carries local-dev-ready defaults (runtimeSecret.create: true),
             // unlike the app chart above which needs an environment values file passed in.
             let kube_manager_chart_dir = platform_dir
@@ -2445,7 +2445,7 @@ fn main() -> Result<()> {
                     extra_values,
                 } => {
                     // Deploys the STANDALONE infra chart (infrastructure/helm/kube-manager,
-                    // see PLAN-cluster-manager-deploy.md Phase M) — a separate, permanent
+                    // a separate, permanent
                     // release from any picusbase app instance. Its own values.yaml already
                     // has local-dev-ready defaults (runtimeSecret.create: true with real
                     // credentials baked in), so --extra-values is only needed to override
