@@ -395,12 +395,16 @@ fn dry_run(
 
     let automations = json_files(&bundle_dir.join("automations"))?;
     if !automations.is_empty() {
-        let existing = existing_ids(api, "workflow_definition");
-        let ids: Vec<String> = automations
+        let records = workflow_records(api).unwrap_or_default();
+        let mut claimed = HashSet::new();
+        let known = automations
             .iter()
-            .filter_map(|path| serde_json::from_str::<Value>(&std::fs::read_to_string(path).ok()?).ok()?["id"].as_str().map(str::to_string))
-            .collect();
-        let known = ids.iter().filter(|id| existing.contains(*id)).count();
+            .filter_map(|path| serde_json::from_str::<Value>(&std::fs::read_to_string(path).ok()?).ok())
+            .filter(|row| match automation_target(&records, &claimed, row) {
+                Some(id) => claimed.insert(id),
+                None => false,
+            })
+            .count();
         println!("\nAutomations ({}): {} new, {known} already in the project (updated)", automations.len(), automations.len() - known);
     }
 
@@ -441,13 +445,6 @@ fn sorted_files(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
 }
 
 /// Record ids of an entity; none when the entity is not defined yet.
-fn existing_ids(api: &Api, entity: &str) -> HashSet<String> {
-    api.get(&format!("/entities/{entity}/records?limit=1000"), &format!("list {entity} records"))
-        .ok()
-        .and_then(|rows| rows.as_array().map(|rows| rows.iter().filter_map(|row| row["id"].as_str().map(str::to_string)).collect()))
-        .unwrap_or_default()
-}
-
 fn existing_agent_handles(api: &Api) -> HashSet<String> {
     api.get("/entities/ai_agent/records?limit=1000", "list ai_agent records")
         .ok()
@@ -591,7 +588,39 @@ fn deploy_functions(
     Ok(failed)
 }
 
-/// `automations/<id>.json` → `workflow_definition` records, upserted by `id`.
+/// (`id`, `workflow_name`) of every `workflow_definition` record, newest first.
+fn workflow_records(api: &Api) -> Result<Vec<(String, String)>> {
+    const PAGE: usize = 1000;
+    let mut records = Vec::new();
+    for page in 1.. {
+        let rows = api.get(&format!("/entities/workflow_definition/records?limit={PAGE}&page={page}"), "list workflow_definition records")?;
+        let rows = rows.as_array().context("list workflow_definition records: not an array")?;
+        records.extend(rows.iter().filter_map(|row| {
+            Some((row["id"].as_str()?.to_string(), row["data"]["workflow_name"].as_str().unwrap_or_default().to_string()))
+        }));
+        if rows.len() < PAGE {
+            break;
+        }
+    }
+    Ok(records)
+}
+
+/// The record an automation file updates: the one with the file's `id`, else the oldest one with its `workflow_name`
+/// (the server assigns its own id on create, so the file's id matches only in the project it was exported from).
+/// A record already taken by another file is not taken twice.
+fn automation_target(records: &[(String, String)], claimed: &HashSet<String>, row: &Value) -> Option<String> {
+    let free = |record: &&(String, String)| !claimed.contains(&record.0);
+    let id = row["id"].as_str().unwrap_or_default();
+    let name = row["workflow_name"].as_str().unwrap_or_default();
+    records
+        .iter()
+        .filter(free)
+        .find(|record| record.0 == id)
+        .or_else(|| records.iter().rev().filter(free).find(|record| !name.is_empty() && record.1 == name))
+        .map(|record| record.0.clone())
+}
+
+/// `automations/<id>.json` → `workflow_definition` records, upserted by `id`, else by `workflow_name`.
 fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -605,39 +634,33 @@ fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
         return Ok(());
     }
     println!("\nAutomations:");
+    // A failed listing stops here: treating it as empty would create duplicates.
+    let records = workflow_records(api)?;
+    let mut claimed = HashSet::new();
     for path in files {
         let row: Value = serde_json::from_str(&std::fs::read_to_string(&path)?).with_context(|| format!("Invalid JSON in {}", path.display()))?;
-        let id = row["id"].as_str().unwrap_or_default().to_string();
         let name = row["workflow_name"].as_str().unwrap_or("(unnamed)").to_string();
+        let target = automation_target(&records, &claimed, &row);
         let body = json!({ "data": row });
-        if !id.is_empty() {
-            let res = api
-                .http
-                .patch(api.url(&format!("/entities/workflow_definition/records/{id}")))
-                .bearer_auth(api.token()?)
-                .json(&body)
-                .send()?;
-            if res.status().is_success() {
-                println!("  = {name}{}", id_suffix(&id));
-                continue;
-            }
-            if res.status() != reqwest::StatusCode::NOT_FOUND {
-                bail!("update automation '{name}' failed ({}): {}", res.status(), res.text().unwrap_or_default());
-            }
+        let Some(id) = target else {
+            api.post("/entities/workflow_definition/records", &body, &format!("create automation '{name}'"))?;
+            println!("  + {name}");
+            continue;
+        };
+        api.send(
+            api.http.patch(api.url(&format!("/entities/workflow_definition/records/{id}"))).json(&body),
+            &format!("update automation '{name}'"),
+        )?;
+        println!("  = {name} ({id})");
+        let same_name = records.iter().filter(|record| record.1 == name).count();
+        if same_name > 1 {
+            println!("    ⚠️  {same_name} records are named '{name}'; only this one was updated, the others still exist and may run too");
         }
-        api.post("/entities/workflow_definition/records", &body, &format!("create automation '{name}'"))?;
-        println!("  + {name}{}", id_suffix(&id));
+        claimed.insert(id);
     }
     Ok(())
 }
 
-fn id_suffix(id: &str) -> String {
-    if id.is_empty() {
-        String::new()
-    } else {
-        format!(" ({id})")
-    }
-}
 
 /// `ai_agent/agents/<handle>.yaml` → `ai_agent` records (created via the API so the
 /// `after_create` hook provisions the agent principal). Skips handles that already exist;
