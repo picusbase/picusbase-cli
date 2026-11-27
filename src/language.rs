@@ -184,6 +184,61 @@ pub fn adapter_for(lang: Language) -> Box<dyn LanguageAdapter> {
 
 pub struct RustAdapter;
 
+/// Variables of the CLI's environment forwarded into the Rust build container.
+const RUST_BUILD_ENV: [&str; 4] = [
+    "PICUSBASE_INTERNAL_SERVICE_TOKEN",
+    "ERP_TENANT_DOMAIN_SUFFIX",
+    "ERP_SOURCE_PROJECT_REF",
+    "ERP_SYSTEM_USER_ID",
+];
+
+/// SHA-256 over what a Rust function's artifact is built from: the files Docker mounts (without
+/// `target/`, `node_modules/`, `dist/`, `.git/`), the forwarded build variables, the build platform
+/// and the CLI version (which pins the Rust image). `None` when these do not pin the build: no
+/// `Cargo.lock` (dependencies resolve to their latest versions) or a `build.rs` (it may read anything).
+pub fn rust_source_fingerprint(dir: &Path) -> Result<Option<String>> {
+    use sha2::{Digest, Sha256};
+    let abs_dir = dir.canonicalize().with_context(|| format!("Failed to resolve {}", dir.display()))?;
+    let root = docker_mount_root(&abs_dir)?;
+    if abs_dir.join("build.rs").exists() || !(abs_dir.join("Cargo.lock").exists() || root.join("Cargo.lock").exists()) {
+        return Ok(None);
+    }
+    let mut files = Vec::new();
+    collect_source_files(&root, &root, &mut files)?;
+    files.sort();
+    let platform = std::env::var("PICUSBASE_NATIVE_BUILD_PLATFORM")
+        .ok()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| format!("host-{}", std::env::consts::ARCH));
+    let mut hash = Sha256::new();
+    hash.update(format!("picusbase-cli {}\0{platform}\0", env!("CARGO_PKG_VERSION")));
+    for var in RUST_BUILD_ENV {
+        hash.update(format!("{var}={}\0", std::env::var(var).unwrap_or_default().trim()));
+    }
+    for rel in files {
+        let bytes = std::fs::read(root.join(&rel))?;
+        hash.update(format!("{}\0{}\0", rel.display(), bytes.len()));
+        hash.update(&bytes);
+    }
+    Ok(Some(format!("{:x}", hash.finalize())))
+}
+
+fn collect_source_files(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(dir).with_context(|| format!("Failed to read {}", dir.display()))? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            if !matches!(entry.file_name().to_str(), Some("target" | "node_modules" | "dist" | ".git")) {
+                collect_source_files(root, &entry.path(), out)?;
+            }
+        } else if file_type.is_file() {
+            out.push(entry.path().strip_prefix(root)?.to_path_buf());
+        }
+    }
+    Ok(())
+}
+
 impl LanguageAdapter for RustAdapter {
     fn language(&self) -> Language {
         Language::Rust
@@ -342,12 +397,7 @@ impl LanguageAdapter for RustAdapter {
         // tenant provisioned on product (2026-09-26 — every prior tenant had only the built-in
         // `entities-data` function, nothing else), then a local-dev `ERP_SYSTEM_USER_ID` that
         // product could not override (2026-11-25).
-        for var in [
-            "PICUSBASE_INTERNAL_SERVICE_TOKEN",
-            "ERP_TENANT_DOMAIN_SUFFIX",
-            "ERP_SOURCE_PROJECT_REF",
-            "ERP_SYSTEM_USER_ID",
-        ] {
+        for var in RUST_BUILD_ENV {
             if let Ok(value) = std::env::var(var) {
                 if !value.trim().is_empty() {
                     cmd.args(["-e", &format!("{var}={}", value.trim())]);

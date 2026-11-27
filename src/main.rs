@@ -754,6 +754,7 @@ fn build_publish_extras(
         runtime_class: Some(runtime_class),
         entrypoint: Some(entrypoint),
         manifest_checksum: Some(manifest_checksum),
+        source_checksum: None,
         allowed_capabilities: Some(allowed_capabilities),
         signature,
         signer_id: signer_id_out,
@@ -794,6 +795,15 @@ fn activate_version_with_retry(
     unreachable!("activation retry loop exited unexpectedly")
 }
 
+/// What `deploy schema` compares with the active version's `source_checksum`: Rust functions only
+/// (see `language::rust_source_fingerprint`); `None` means always deploy.
+pub(crate) fn source_fingerprint(dir: &Path, lang: Language) -> Result<Option<String>> {
+    match lang {
+        Language::Rust => language::rust_source_fingerprint(dir),
+        Language::JavaScript | Language::Python => Ok(None),
+    }
+}
+
 pub(crate) fn deploy_function_dir(
     path: &Path,
     client_base_url: &str,
@@ -829,6 +839,8 @@ pub(crate) fn deploy_function_dir(
         )
     })?;
     let adapter = adapter_for(lang);
+    // Before the build, which may create the Cargo.lock the fingerprint requires.
+    let source_checksum = source_fingerprint(path, lang)?;
 
     println!(
         "🛠️  Building function artifact via {} adapter...",
@@ -854,6 +866,7 @@ pub(crate) fn deploy_function_dir(
         signing_key_path.as_deref(),
         signer_id.as_deref(),
     )?;
+    let extras = PublishExtras { source_checksum, ..extras };
 
     // Upload
     println!("📤 Uploading {}...", wasm_path.display());
@@ -1703,6 +1716,7 @@ fn main() -> Result<()> {
                         runtime_class: Some(runtime_class),
                         entrypoint: Some(entrypoint),
                         manifest_checksum: Some(manifest_checksum),
+                        source_checksum: None,
                         allowed_capabilities: Some("[]".to_string()),
                         signature,
                         signer_id: signer_id_val,
