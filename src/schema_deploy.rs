@@ -22,6 +22,8 @@ pub struct SchemaDeployOptions {
     pub dry_run: bool,
     /// A failing function does not stop the others; every failure is reported at the end.
     pub keep_going: bool,
+    /// Entities whose files match the published version are deployed too.
+    pub force: bool,
 }
 
 /// Roles the platform provides in every project; a permission naming one without a `role.yaml` is normal.
@@ -157,6 +159,30 @@ fn deploy_order(doctypes: &BTreeMap<String, Value>) -> Vec<String> {
     order
 }
 
+/// Entities whose published version was made from exactly these files, read 8 at a time.
+fn unchanged_entities(api: &Api, entities: &BTreeMap<String, Files>) -> BTreeSet<String> {
+    let codes: Vec<&String> = entities.keys().collect();
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = codes
+            .chunks(codes.len().div_ceil(8).max(1))
+            .map(|chunk| {
+                scope.spawn(move || {
+                    chunk.iter().filter(|code| published_files(api, code).as_ref() == entities.get(**code)).map(|code| code.to_string()).collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        workers.into_iter().flat_map(|worker| worker.join().unwrap_or_default()).collect()
+    })
+}
+
+/// Files of the published version; `None` when there is none or it cannot be read, so the entity is deployed.
+fn published_files(api: &Api, code: &str) -> Option<Files> {
+    let active = api.get(&format!("/builder/entity/{code}/active"), "read published version").ok()?;
+    let id = active["id"].as_str()?;
+    let mut version = api.get(&format!("/builder/entity/{code}/versions/{id}/preview"), "read published files").ok()?;
+    serde_json::from_value(version["source_yaml"].take()).ok()
+}
+
 fn jwt_subject(token: &str) -> Option<String> {
     use base64::Engine;
     let payload = token.split('.').nth(1)?;
@@ -255,8 +281,13 @@ pub fn run(
             .collect::<Result<_>>()?;
 
         println!("\nEntities:");
+        let unchanged = if options.force { BTreeSet::new() } else { unchanged_entities(&api, &entities) };
+        if !unchanged.is_empty() {
+            let names: Vec<&str> = unchanged.iter().map(String::as_str).collect();
+            println!("  = {} unchanged, skipped (--force deploys them): {}", names.len(), names.join(", "));
+        }
         let mut invalid = Vec::new();
-        for code in deploy_order(&doctypes) {
+        for code in deploy_order(&doctypes).into_iter().filter(|code| !unchanged.contains(code)) {
             api.post("/entities", &doctypes[&code], &format!("define entity '{code}'"))?;
             let draft = api.post(
                 &format!("/builder/entity/{code}/versions"),

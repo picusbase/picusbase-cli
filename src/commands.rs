@@ -814,6 +814,9 @@ pub enum DeployCommands {
         /// When a function fails, deploy the remaining ones and report every failure at the end
         #[arg(long, default_value_t = false)]
         keep_going: bool,
+        /// Deploy every entity, including those whose files match the published version
+        #[arg(long, default_value_t = false)]
+        force: bool,
     },
     /// Build a frontend app (picus.app.toml) and deploy it to its domain
     App {
