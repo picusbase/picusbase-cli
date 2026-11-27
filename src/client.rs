@@ -13,6 +13,7 @@ pub struct PublishExtras {
     pub runtime_class: Option<String>,
     pub entrypoint: Option<String>,
     pub manifest_checksum: Option<String>,
+    pub source_checksum: Option<String>,
     pub allowed_capabilities: Option<String>,
     pub signature: Option<String>,
     pub signer_id: Option<String>,
@@ -36,6 +37,14 @@ pub struct ComputeFunction {
     pub function_key: String,
     pub name: String,
     pub project_ref: String,
+    /// Only from the function list, and only on servers that report it.
+    #[serde(default)]
+    pub active_version: Option<ActiveVersion>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActiveVersion {
+    pub source_checksum: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, tabled::Tabled)]
@@ -369,6 +378,9 @@ impl PicusClient {
         }
         if let Some(ref v) = extras.manifest_checksum {
             form = form.text("manifest_checksum", v.clone());
+        }
+        if let Some(ref v) = extras.source_checksum {
+            form = form.text("source_checksum", v.clone());
         }
         if let Some(ref v) = extras.allowed_capabilities {
             form = form.text("allowed_capabilities", v.clone());

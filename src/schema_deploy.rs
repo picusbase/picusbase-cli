@@ -22,7 +22,7 @@ pub struct SchemaDeployOptions {
     pub dry_run: bool,
     /// A failing function does not stop the others; every failure is reported at the end.
     pub keep_going: bool,
-    /// Entities whose files match the published version are deployed too.
+    /// Entities and functions that match the published version are deployed too.
     pub force: bool,
 }
 
@@ -318,7 +318,7 @@ pub fn run(
     if options.skip_functions {
         println!("\nFunctions: skipped (--skip-functions)");
     } else {
-        failed_functions.extend(deploy_functions(&scan, &deployable, client, project_ref, personal_token, options.keep_going)?);
+        failed_functions.extend(deploy_functions(&scan, &deployable, client, project_ref, personal_token, options.keep_going, options.force)?);
     }
     restore_automations(&api, &bundle_dir.join("automations"))?;
     let bound_user = options.bound_user_id.or_else(|| api.token().ok().and_then(|t| jwt_subject(&t)));
@@ -585,6 +585,7 @@ fn deploy_functions(
     project_ref: &str,
     personal_token: Option<String>,
     keep_going: bool,
+    force: bool,
 ) -> Result<Vec<(PathBuf, String)>> {
     let mut failed = Vec::new();
     if scan.dirs.is_empty() {
@@ -593,7 +594,12 @@ fn deploy_functions(
     }
     println!("\nFunctions ({}):", scan.dirs.len());
     print_skipped(scan);
-    for function_dir in dirs {
+    let unchanged = if force { BTreeSet::new() } else { unchanged_functions(client, dirs) };
+    if !unchanged.is_empty() {
+        let names: Vec<String> = unchanged.iter().map(|dir| dir_name(dir)).collect();
+        println!("  = {} unchanged, skipped (--force deploys them): {}", names.len(), names.join(", "));
+    }
+    for function_dir in dirs.iter().filter(|dir| !unchanged.contains(*dir)) {
         let result = crate::deploy_function_dir(
             function_dir,
             client.base_url(),
@@ -652,6 +658,28 @@ fn automation_target(records: &[(String, String)], claimed: &HashSet<String>, ro
 }
 
 /// `automations/<id>.json` → `workflow_definition` records, upserted by `id`, else by `workflow_name`.
+/// Functions whose source fingerprint equals that of their active version. A server that does not
+/// report `active_version` leaves every function to deploy.
+fn unchanged_functions(client: &PicusClient, dirs: &[PathBuf]) -> BTreeSet<PathBuf> {
+    let published: HashMap<String, String> = client
+        .list_compute_functions()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|f| Some((f.function_key, f.active_version?.source_checksum?)))
+        .collect();
+    if published.is_empty() {
+        return BTreeSet::new();
+    }
+    dirs.iter()
+        .filter(|dir| {
+            let Ok(config) = crate::config::PicusConfig::load_from_dir(dir) else { return false };
+            let Ok(lang) = crate::language::detect_language(dir) else { return false };
+            matches!(crate::source_fingerprint(dir, lang), Ok(Some(fingerprint)) if published.get(&config.function.id) == Some(&fingerprint))
+        })
+        .cloned()
+        .collect()
+}
+
 fn restore_automations(api: &Api, dir: &Path) -> Result<()> {
     if !dir.is_dir() {
         return Ok(());
