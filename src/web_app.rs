@@ -149,13 +149,26 @@ fn pack_dir(dir: &Path) -> Result<Vec<u8>> {
     Ok(archive.into_inner()?.finish()?)
 }
 
-/// The host injects `<script>window.__PICUS_CONFIG__=…</script>` into index.html.
-fn strip_injected_config(html: &str) -> String {
-    const MARKER: &str = "<script>window.__PICUS_CONFIG__=";
-    match html.find(MARKER).and_then(|start| html[start..].find("</script>").map(|end| (start, start + end + 9))) {
-        Some((start, end)) => format!("{}{}", &html[..start], &html[end..]),
-        None => html.to_string(),
+/// Tags and trimmed text between them.
+fn html_tokens(html: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut rest = html;
+    while !rest.is_empty() {
+        let end = if rest.starts_with('<') { rest.find('>').map_or(rest.len(), |i| i + 1) } else { rest.find('<').unwrap_or(rest.len()) };
+        let token = rest[..end].trim();
+        if !token.is_empty() {
+            tokens.push(token);
+        }
+        rest = &rest[end..];
     }
+    tokens
+}
+
+/// Every tag and text of the built page, in order. The host and proxies add elements (a CDN such as
+/// Cloudflare injects its analytics script), so the served page is never byte-equal to the build.
+fn serves_build(served: &str, built: &str) -> bool {
+    let mut served = html_tokens(served).into_iter();
+    html_tokens(built).into_iter().all(|token| served.any(|s| s == token))
 }
 
 /// Waits until the domain serves this build's index.html (a redeploy keeps the old pod serving
@@ -174,7 +187,7 @@ fn wait_until_serving(url: &str, expected_index: &str) -> bool {
             .ok()
             .filter(|res| res.status().is_success())
             .and_then(|res| res.text().ok())
-            .is_some_and(|html| strip_injected_config(&html) == expected_index);
+            .is_some_and(|html| serves_build(&html, expected_index));
         if served {
             return true;
         }
